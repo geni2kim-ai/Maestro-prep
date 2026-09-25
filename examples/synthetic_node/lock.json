@@ -1,0 +1,11 @@
+{
+  "schema": "MAESTRO_PREP_LOCK_V1",
+  "astra": {
+    "skill_sha256": "0a16faabb3c8a34afec0f300ac2287a844a31d8ecc90dcfeeac216db04adf82f",
+    "approved_version_label": "SYNTHETIC-ONLY"
+  },
+  "leonardo": {
+    "router_version": "SYNTHETIC-ROUTER",
+    "policy_sha256": "fecb658310c69841f5ddc94bed62ded9a39b25d7af910da94802cacbf067e23f"
+  }
+}

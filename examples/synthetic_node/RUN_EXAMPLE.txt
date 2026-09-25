@@ -1,0 +1,3 @@
+SYNTHETIC ONLY: run from package root:
+python -m maestro_prep.cli decide --work examples/synthetic_node/work.json --lock examples/synthetic_node/lock.json --o-signal examples/synthetic_node/signal.json --receipt-index examples/synthetic_node/private/receipt_index.json --evidence-root examples/synthetic_node/private --astra-skill examples/synthetic_node/synthetic_astra/SKILL.md --astra-plan-receipt astra_capture.json --leonardo-route route_capture.json
+This proves LOCAL BYTES only, not real Astra/Leonardo execution.

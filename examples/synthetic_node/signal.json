@@ -1,0 +1,59 @@
+{
+  "schema": "O_PREP_SIGNAL_V1",
+  "work_unit": "SYNTHETIC-UNIT-TEST",
+  "node_id": "synthetic",
+  "captured_at_utc": "2026-09-25T00:00:00Z",
+  "stage": "PLAN",
+  "router": {
+    "status": "READY",
+    "exit_code": 0,
+    "local_router_executed": true,
+    "policy_hash_verified": true,
+    "input_hash_verified": true,
+    "output_hash_verified": true,
+    "evidence_root_isolated": true
+  },
+  "evidence": {
+    "manifest_verified": true,
+    "summary_raw_consistent": true,
+    "timestamp_provenance_verified": true,
+    "backfill_disclosed": true
+  },
+  "execution": {
+    "secret_exposure": false,
+    "mutation_requested": false,
+    "authority_verified": false,
+    "live_action_requested": false,
+    "shared_router_tree_write": false,
+    "reviewed_bytes_changed": false,
+    "blocked_node_contact": false
+  },
+  "review": {
+    "status": "PASS",
+    "evidence_class": "VERIFIED_INDEPENDENT",
+    "verified_independent": true,
+    "harness_separately_verified": true,
+    "fresh_context_policy_verified": false,
+    "adjudicator_separate": true,
+    "review_hash_matches": true,
+    "blocking_findings": false
+  },
+  "delivery": {
+    "required": true,
+    "state": "PROCESSED",
+    "disposition": "ACCEPTED",
+    "ack_required": true,
+    "ack_verified": true,
+    "dedup_persistence_verified": true,
+    "disposition_evidence_verified": true,
+    "claims_accepted": true,
+    "idempotency_key": "synthetic-only"
+  },
+  "assertions": {
+    "metrics_simultaneous_claim": false,
+    "claims_backfill_proves_history": false,
+    "claims_full_closeout": false
+  },
+  "metrics": [],
+  "open_gates": []
+}

@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "O-Prep candidate gate signal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "work_unit",
+    "node_id",
+    "captured_at_utc",
+    "stage",
+    "router",
+    "evidence",
+    "execution",
+    "review",
+    "delivery",
+    "assertions",
+    "metrics",
+    "open_gates"
+  ],
+  "properties": {
+    "schema": {
+      "const": "O_PREP_SIGNAL_V1"
+    },
+    "work_unit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "node_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "captured_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "enum": [
+        "PLAN",
+        "EXECUTE",
+        "PUBLISH",
+        "CLOSE"
+      ]
+    },
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_router_executed",
+        "policy_hash_verified",
+        "input_hash_verified",
+        "output_hash_verified",
+        "evidence_root_isolated",
+        "status",
+        "exit_code"
+      ],
+      "properties": {
+        "local_router_executed": {
+          "type": "boolean"
+        },
+        "policy_hash_verified": {
+          "type": "boolean"
+        },
+        "input_hash_verified": {
+          "type": "boolean"
+        },
+        "output_hash_verified": {
+          "type": "boolean"
+        },
+        "evidence_root_isolated": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "READY",
+            "BLOCKED",
+            "CLARIFICATION_REQUIRED",
+            "ERROR",
+            "NOT_RUN"
+          ]
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_verified",
+        "summary_raw_consistent",
+        "timestamp_provenance_verified",
+        "backfill_disclosed"
+      ],
+      "properties": {
+        "manifest_verified": {
+          "type": "boolean"
+        },
+        "summary_raw_consistent": {
+          "type": "boolean"
+        },
+        "timestamp_provenance_verified": {
+          "type": "boolean"
+        },
+        "backfill_disclosed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "secret_exposure",
+        "mutation_requested",
+        "authority_verified",
+        "live_action_requested",
+        "shared_router_tree_write",
+        "reviewed_bytes_changed",
+        "blocked_node_contact"
+      ],
+      "properties": {
+        "secret_exposure": {
+          "type": "boolean"
+        },
+        "mutation_requested": {
+          "type": "boolean"
+        },
+        "authority_verified": {
+          "type": "boolean"
+        },
+        "live_action_requested": {
+          "type": "boolean"
+        },
+        "shared_router_tree_write": {
+          "type": "boolean"
+        },
+        "reviewed_bytes_changed": {
+          "type": "boolean"
+        },
+        "blocked_node_contact": {
+          "type": "boolean"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified_independent",
+        "harness_separately_verified",
+        "fresh_context_policy_verified",
+        "adjudicator_separate",
+        "review_hash_matches",
+        "blocking_findings",
+        "status",
+        "evidence_class"
+      ],
+      "properties": {
+        "verified_independent": {
+          "type": "boolean"
+        },
+        "harness_separately_verified": {
+          "type": "boolean"
+        },
+        "fresh_context_policy_verified": {
+          "type": "boolean"
+        },
+        "adjudicator_separate": {
+          "type": "boolean"
+        },
+        "review_hash_matches": {
+          "type": "boolean"
+        },
+        "blocking_findings": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "PASS",
+            "FINDINGS",
+            "NOT_RUN"
+          ]
+        },
+        "evidence_class": {
+          "enum": [
+            "NOT_RUN",
+            "SAME_LINEAGE",
+            "FRESH_CONTEXT",
+            "VERIFIED_INDEPENDENT"
+          ]
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "ack_required",
+        "ack_verified",
+        "dedup_persistence_verified",
+        "disposition_evidence_verified",
+        "claims_accepted",
+        "state",
+        "disposition",
+        "idempotency_key"
+      ],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "ack_required": {
+          "type": "boolean"
+        },
+        "ack_verified": {
+          "type": "boolean"
+        },
+        "dedup_persistence_verified": {
+          "type": "boolean"
+        },
+        "disposition_evidence_verified": {
+          "type": "boolean"
+        },
+        "claims_accepted": {
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "NOT_RUN",
+            "PENDING",
+            "DELIVERED",
+            "PROCESSED"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "NOT_RUN",
+            "HELD",
+            "FINDINGS",
+            "ACCEPTED",
+            "REJECTED"
+          ]
+        },
+        "idempotency_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metrics_simultaneous_claim",
+        "claims_backfill_proves_history",
+        "claims_full_closeout"
+      ],
+      "properties": {
+        "metrics_simultaneous_claim": {
+          "type": "boolean"
+        },
+        "claims_backfill_proves_history": {
+          "type": "boolean"
+        },
+        "claims_full_closeout": {
+          "type": "boolean"
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "captured_at_utc",
+          "source_sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "captured_at_utc": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "open_gates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  }
+}

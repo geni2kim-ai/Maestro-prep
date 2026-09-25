@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "O-Prep local byte receipt index (untrusted metadata, candidate only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "work_unit", "node_id", "stage", "captured_at_utc", "receipts"],
+  "properties": {
+    "schema": {"const": "O_PREP_RECEIPT_INDEX_V1"},
+    "work_unit": {"type": "string", "minLength": 1},
+    "node_id": {"type": "string", "minLength": 1},
+    "stage": {"enum": ["PLAN", "EXECUTE", "PUBLISH", "CLOSE"]},
+    "captured_at_utc": {"type": "string", "minLength": 1},
+    "receipts": {
+      "type": "array", "maxItems": 16,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["role", "path", "sha256", "size_bytes"],
+        "properties": {
+          "role": {"enum": ["router_input", "router_policy", "router_output", "review_subject", "review_receipt", "dedup_receipt", "ack_receipt", "acceptance_receipt"]},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size_bytes": {"type": "integer", "minimum": 0, "maximum": 2097152}
+        }
+      }
+    }
+  }
+}

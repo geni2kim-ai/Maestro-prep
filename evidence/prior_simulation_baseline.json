@@ -1,0 +1,224 @@
+{
+  "kind": "PRIOR_SYNTHETIC_SIMULATION",
+  "source_sha256": "e3b49893c65641ba1fee5f3777f6dcc2e22b37d15e67a89f010db829414ef6f7",
+  "original_summary": {
+    "kind": "SYNTHETIC_ARCHITECTURE_TEST_NOT_PRODUCTION_BENCHMARK",
+    "astra_actual_skill": "NOT_AVAILABLE",
+    "leonardo_actual_router": "NOT_RUN",
+    "o_prep_engine": "REAL_V03_EVALUATE_SIGNAL",
+    "scenarios_total": 20,
+    "o_prep_expected_branches_matched": 20,
+    "B_one_choice_skipped_O_gate_on_blocking_scenarios": 11,
+    "A_naive_branch_skipped_O_gate_on_blocking_scenarios": 11,
+    "B_one_choice_skipped_O_gate_scenarios": [
+      "stale_manifest",
+      "unverified_router",
+      "secret_exposure",
+      "unapproved_mutation",
+      "reviewed_bytes_changed",
+      "review_not_run",
+      "dedup_unverified",
+      "ack_missing",
+      "premature_close",
+      "stale_policy_resume",
+      "same_lineage_review"
+    ],
+    "C_compulsory_O_gate_skipped_when_available": 0,
+    "module_absence_examples": {
+      "astra_unavailable_audit": {
+        "A": "UNAVAILABLE_WHOLE_BUNDLE",
+        "B": "ADVANCE_CANDIDATE",
+        "C": "ADVANCE_CANDIDATE"
+      },
+      "astra_unavailable_plan": {
+        "A": "UNAVAILABLE_WHOLE_BUNDLE",
+        "B": "ASTRA_UNAVAILABLE",
+        "C": "HOLD_PLAN_MODULE_MISSING"
+      },
+      "o_prep_unavailable": {
+        "A": "UNAVAILABLE_WHOLE_BUNDLE",
+        "B": "PLAN_ONLY_NO_O_GATE",
+        "C": "HOLD_O_MODULE_MISSING"
+      }
+    },
+    "bound_byte_probes": {
+      "synthetic_clean_result": "ADVANCE_CANDIDATE",
+      "synthetic_clean_binding": "LOCAL_BYTES_VERIFIED_ONLY",
+      "tampered_router_output_result": "HOLD_SOURCE",
+      "tampered_issue_codes": [
+        "RECEIPT_BYTES_MISMATCH_ROUTER_OUTPUT",
+        "BOUND_RECEIPT_MISSING_ROUTER_OUTPUT"
+      ],
+      "has_host_authority": false
+    },
+    "limitations": [
+      "Assumed routing classification, not measured Leonardo accuracy",
+      "Astra behavior modeled solely at interface/availability level",
+      "O-Prep signals are synthetic assertions, not independent node attestations",
+      "No runtime performance, end-to-end latency, token, availability or security probability measurements",
+      "No local, remote, shared or Live node mutated"
+    ]
+  },
+  "cases": [
+    {
+      "scenario": "new_code_clean",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "ADVANCE_CANDIDATE",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "read_only_audit",
+      "stage": "PLAN",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "ADVANCE_CANDIDATE",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "stale_manifest",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "HOLD_SOURCE",
+      "C_orchestrated_separate": "HOLD_SOURCE",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "unverified_router",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "HOLD_ROUTING",
+      "C_orchestrated_separate": "HOLD_ROUTING",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "secret_exposure",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "STOP_DISCLOSURE",
+      "C_orchestrated_separate": "STOP_DISCLOSURE",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "unapproved_mutation",
+      "stage": "EXECUTE",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "STOP_MUTATION",
+      "C_orchestrated_separate": "STOP_MUTATION",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "reviewed_bytes_changed",
+      "stage": "PUBLISH",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "REWORK",
+      "C_orchestrated_separate": "REWORK",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "review_not_run",
+      "stage": "PUBLISH",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "HOLD_REVIEW",
+      "C_orchestrated_separate": "HOLD_REVIEW",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "dedup_unverified",
+      "stage": "PUBLISH",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "HOLD_DELIVERY",
+      "C_orchestrated_separate": "HOLD_DELIVERY",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "ack_missing",
+      "stage": "CLOSE",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "HOLD_DELIVERY",
+      "C_orchestrated_separate": "HOLD_DELIVERY",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "clean_closeout",
+      "stage": "CLOSE",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "ADVANCE_CANDIDATE",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "fresh_idea_plan",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "ADVANCE_CANDIDATE",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "premature_close",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "HOLD_EVIDENCE",
+      "C_orchestrated_separate": "HOLD_EVIDENCE",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "astra_unavailable_audit",
+      "stage": "PLAN",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "ADVANCE_CANDIDATE",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "astra_unavailable_plan",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "HOLD_PLAN_MODULE_MISSING",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "o_prep_unavailable",
+      "stage": "EXECUTE",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "HOLD_O_MODULE_MISSING",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "contract_mismatch",
+      "stage": "PLAN",
+      "new_astra_plan": true,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "HOLD_CONTRACT_MISMATCH",
+      "B_skipped_required_gate": false
+    },
+    {
+      "scenario": "stale_policy_resume",
+      "stage": "EXECUTE",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "HOLD_ROUTING",
+      "C_orchestrated_separate": "HOLD_ROUTING",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "same_lineage_review",
+      "stage": "PUBLISH",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "HOLD_REVIEW",
+      "C_orchestrated_separate": "HOLD_REVIEW",
+      "B_skipped_required_gate": true
+    },
+    {
+      "scenario": "audit_with_oprep",
+      "stage": "PLAN",
+      "new_astra_plan": false,
+      "o_prep_actual_unbound": "ADVANCE_CANDIDATE",
+      "C_orchestrated_separate": "ADVANCE_CANDIDATE",
+      "B_skipped_required_gate": false
+    }
+  ]
+}

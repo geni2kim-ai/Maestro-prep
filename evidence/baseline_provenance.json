@@ -1,0 +1,9 @@
+{
+  "O-Prep-v0.3-archive_sha256": "84a9d4d178df8c8a0968e3cd61221e90a2d02b8baf95a5e232dfed8dc173b464",
+  "prior-sim-summary-original-sha256": "e3b49893c65641ba1fee5f3777f6dcc2e22b37d15e67a89f010db829414ef6f7",
+  "astra-official-source": "NOT_AVAILABLE",
+  "leonardo-executable": "NOT_AVAILABLE",
+  "original_private_archives_bundled": false,
+  "full_private_source_reproduced": false,
+  "tests": "separate local run report in RUN_REPORT.json"
+}

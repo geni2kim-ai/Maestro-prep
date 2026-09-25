@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"MAESTRO_PREP_LOCK_V1","type":"object","additionalProperties":false,
+  "required":["schema","astra","leonardo"],
+  "properties":{
+    "schema":{"const":"MAESTRO_PREP_LOCK_V1"},
+    "astra":{"type":"object","additionalProperties":false,"required":["skill_sha256","approved_version_label"],
+      "properties":{"skill_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},"approved_version_label":{"type":"string","minLength":1,"maxLength":100}}},
+    "leonardo":{"type":"object","additionalProperties":false,"required":["router_version","policy_sha256"],
+      "properties":{"router_version":{"type":"string","minLength":1,"maxLength":100},"policy_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"}}}
+  }
+}

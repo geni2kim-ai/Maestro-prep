@@ -1,0 +1,1 @@
+{"schema": "ASTRA_PREP_CAPTURE_V1", "work_unit": "SYNTHETIC-UNIT-TEST", "node_id": "synthetic", "astra_skill_sha256": "0a16faabb3c8a34afec0f300ac2287a844a31d8ecc90dcfeeac216db04adf82f", "plan_sha256": "3ac95589fec9896c37155eea539f9faaa148d1c47931e5b678c6fe27c8850c66", "plan_file": "plan.json", "status": "READY_FOR_LOCAL_CANDIDATE_WORK", "captured_at_utc": "2026-09-25T00:00:00Z"}

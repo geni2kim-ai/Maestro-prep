@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "O-Prep candidate-only decision record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "o_prep_version",
+    "work_unit",
+    "node_id",
+    "source_captured_at_utc",
+    "stage",
+    "next_action",
+    "issues",
+    "host_mutation_authorized",
+    "live_effect",
+    "candidate_only",
+    "finality",
+    "decision_authority",
+    "evaluation_mode"
+  ],
+  "properties": {
+    "schema": {
+      "const": "O_PREP_DECISION_V1"
+    },
+    "o_prep_version": {
+      "type": "string"
+    },
+    "work_unit": {
+      "type": "string"
+    },
+    "node_id": {
+      "type": "string"
+    },
+    "source_captured_at_utc": {
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "PLAN",
+        "EXECUTE",
+        "PUBLISH",
+        "CLOSE"
+      ]
+    },
+    "next_action": {
+      "type": "string"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "state"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "host_mutation_authorized": {
+      "const": false
+    },
+    "live_effect": {
+      "const": "NOT_RUN"
+    },
+    "candidate_only": {
+      "const": true
+    },
+    "finality": {
+      "const": "non_final"
+    },
+    "decision_authority": {
+      "const": "none"
+    },
+    "evaluation_mode": {
+      "enum": [
+        "UNBOUND_SIMULATION",
+        "LOCAL_BYTES_BOUND_CANDIDATE"
+      ]
+    },
+    "evidence_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "checked_roles",
+        "missing_roles",
+        "artifact_count",
+        "provenance_limit"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "LOCAL_BYTES_VERIFIED_ONLY",
+            "INCOMPLETE_OR_MISMATCH"
+          ]
+        },
+        "checked_roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifact_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provenance_limit": {
+          "const": "BYTES_ONLY_NO_AUTHORITY_ASSERTED"
+        }
+      }
+    }
+  }
+}

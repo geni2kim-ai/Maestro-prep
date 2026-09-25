@@ -1,0 +1,154 @@
+{
+  "schema": "MAESTRO_SYNTHETIC_REPLAY_V1",
+  "kind": "RECONSTRUCTED_SYNTHETIC_NOT_RUNTIME_BENCHMARK",
+  "scenario_count": 20,
+  "o_prep_cases_matched": 20,
+  "c_model_cases_matched": 20,
+  "naive_choice_skips": 11,
+  "c_compulsory_gate_skips_when_available": 0,
+  "astra_actual": "NOT_RUN",
+  "leonardo_actual": "NOT_RUN",
+  "host_mutation_authorized": false,
+  "cases": [
+    {
+      "scenario": "new_code_clean",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "ADVANCE_CANDIDATE",
+      "prior_c_result": "ADVANCE_CANDIDATE",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "read_only_audit",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "ADVANCE_CANDIDATE",
+      "prior_c_result": "ADVANCE_CANDIDATE",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "stale_manifest",
+      "o_prep_reconstructed": "HOLD_SOURCE",
+      "c_orchestrated_model": "HOLD_SOURCE",
+      "prior_c_result": "HOLD_SOURCE",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "unverified_router",
+      "o_prep_reconstructed": "HOLD_ROUTING",
+      "c_orchestrated_model": "HOLD_ROUTING",
+      "prior_c_result": "HOLD_ROUTING",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "secret_exposure",
+      "o_prep_reconstructed": "STOP_DISCLOSURE",
+      "c_orchestrated_model": "STOP_DISCLOSURE",
+      "prior_c_result": "STOP_DISCLOSURE",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "unapproved_mutation",
+      "o_prep_reconstructed": "STOP_MUTATION",
+      "c_orchestrated_model": "STOP_MUTATION",
+      "prior_c_result": "STOP_MUTATION",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "reviewed_bytes_changed",
+      "o_prep_reconstructed": "REWORK",
+      "c_orchestrated_model": "REWORK",
+      "prior_c_result": "REWORK",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "review_not_run",
+      "o_prep_reconstructed": "HOLD_REVIEW",
+      "c_orchestrated_model": "HOLD_REVIEW",
+      "prior_c_result": "HOLD_REVIEW",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "dedup_unverified",
+      "o_prep_reconstructed": "HOLD_DELIVERY",
+      "c_orchestrated_model": "HOLD_DELIVERY",
+      "prior_c_result": "HOLD_DELIVERY",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "ack_missing",
+      "o_prep_reconstructed": "HOLD_DELIVERY",
+      "c_orchestrated_model": "HOLD_DELIVERY",
+      "prior_c_result": "HOLD_DELIVERY",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "clean_closeout",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "ADVANCE_CANDIDATE",
+      "prior_c_result": "ADVANCE_CANDIDATE",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "fresh_idea_plan",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "ADVANCE_CANDIDATE",
+      "prior_c_result": "ADVANCE_CANDIDATE",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "premature_close",
+      "o_prep_reconstructed": "HOLD_EVIDENCE",
+      "c_orchestrated_model": "HOLD_EVIDENCE",
+      "prior_c_result": "HOLD_EVIDENCE",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "astra_unavailable_audit",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "ADVANCE_CANDIDATE",
+      "prior_c_result": "ADVANCE_CANDIDATE",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "astra_unavailable_plan",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "HOLD_PLAN_MODULE_MISSING",
+      "prior_c_result": "HOLD_PLAN_MODULE_MISSING",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "o_prep_unavailable",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "HOLD_O_MODULE_MISSING",
+      "prior_c_result": "HOLD_O_MODULE_MISSING",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "contract_mismatch",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "HOLD_CONTRACT_MISMATCH",
+      "prior_c_result": "HOLD_CONTRACT_MISMATCH",
+      "naive_skipped_o_gate": false
+    },
+    {
+      "scenario": "stale_policy_resume",
+      "o_prep_reconstructed": "HOLD_ROUTING",
+      "c_orchestrated_model": "HOLD_ROUTING",
+      "prior_c_result": "HOLD_ROUTING",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "same_lineage_review",
+      "o_prep_reconstructed": "HOLD_REVIEW",
+      "c_orchestrated_model": "HOLD_REVIEW",
+      "prior_c_result": "HOLD_REVIEW",
+      "naive_skipped_o_gate": true
+    },
+    {
+      "scenario": "audit_with_oprep",
+      "o_prep_reconstructed": "ADVANCE_CANDIDATE",
+      "c_orchestrated_model": "ADVANCE_CANDIDATE",
+      "prior_c_result": "ADVANCE_CANDIDATE",
+      "naive_skipped_o_gate": false
+    }
+  ]
+}

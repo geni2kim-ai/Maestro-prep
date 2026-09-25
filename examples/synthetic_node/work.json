@@ -1,0 +1,10 @@
+{
+  "schema": "MAESTRO_PREP_WORK_V1",
+  "work_unit": "SYNTHETIC-UNIT-TEST",
+  "node_id": "synthetic",
+  "captured_at_utc": "2026-09-25T00:00:00Z",
+  "stage": "PLAN",
+  "intent": "NEW_PLAN",
+  "task_sha256": "ccc67a9bfb4c2533d29dfacb86eaa0bd75c4774fa2e69dff513fb9e0016bdf76",
+  "plan_sha256": null
+}

@@ -1,0 +1,21 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"MAESTRO_PREP_WORK_V1",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["schema","work_unit","node_id","captured_at_utc","stage","intent","task_sha256","plan_sha256"],
+  "properties":{
+    "schema":{"const":"MAESTRO_PREP_WORK_V1"},
+    "work_unit":{"type":"string","minLength":1,"maxLength":160},
+    "node_id":{"type":"string","minLength":1,"maxLength":160},
+    "captured_at_utc":{"type":"string","format":"date-time"},
+    "stage":{"enum":["PLAN","EXECUTE","PUBLISH","CLOSE"]},
+    "intent":{"enum":["NEW_PLAN","REPLAN","REUSE_PLAN","READ_ONLY"]},
+    "task_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "plan_sha256":{"oneOf":[{"type":"null"},{"type":"string","pattern":"^[a-f0-9]{64}$"}]}
+  },
+  "allOf":[
+    {"if":{"properties":{"intent":{"const":"REUSE_PLAN"}}},"then":{"properties":{"plan_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"}}}},
+    {"if":{"properties":{"intent":{"const":"READ_ONLY"}}},"then":{"properties":{"stage":{"const":"PLAN"}}}}
+  ]
+}

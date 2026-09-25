@@ -1,0 +1,28 @@
+{
+  "schema": "MAESTRO_PREP_TEST_RECEIPT_V1",
+  "state": "CANDIDATE_ONLY",
+  "integration_tests": {
+    "tests": 25,
+    "result": "PASS",
+    "source": "LOCAL_REEXECUTION"
+  },
+  "o_prep_v03_original_regression": {
+    "tests": 61,
+    "result": "PASS",
+    "source": "LOCAL_REEXECUTION"
+  },
+  "reconstructed_synthetic_scenarios": {
+    "cases": 20,
+    "match": 20,
+    "naive_skipped": 11,
+    "c_skipped_when_o_available": 0
+  },
+  "byte_bound_synthetic_cli": {
+    "result": "BOUND_CANDIDATE_CHECKS_PASSED",
+    "authority": false
+  },
+  "real_astra_router": "NOT_RUN",
+  "real_leonardo_router": "NOT_RUN",
+  "node_deployment": "NOT_RUN",
+  "source_scope": "SYNTHETIC_TESTS_AND_PINNED_VENDOR_ONLY"
+}
