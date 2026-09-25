@@ -8,7 +8,7 @@ This is an **offline, candidate-only** implementation. It does **not** include t
 
 See [SKILL.md](SKILL.md) for the skill contract and [README_KO.md](README_KO.md) for the Korean guide.
 
-The original complete v0.1 source set is also distributed as `maestro-prep-v0.1-source.tar.xz` in this repository. Extract it to inspect the component source, schemas, fixtures, tests, integration adapters, and manifests. On Linux/macOS: `tar -xJf maestro-prep-v0.1-source.tar.xz`.
+The complete v0.1 candidate source is available directly in this repository, including the O-Prep component, schemas, synthetic examples, tests, integration contracts, and manifests. Clone this repository to run the offline checks.
 
 From the extracted directory:
 
