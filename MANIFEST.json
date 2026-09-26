@@ -1,7 +1,7 @@
 {
   "schema": "MAESTRO_PREP_PACKAGE_V1",
-  "version": "0.2.9-r2-public-redacted-candidate",
-  "file_count": 72,
+  "version": "0.2.9-r3-public-minimal-source-candidate",
+  "file_count": 68,
   "files": [
     {
       "path": ".gitattributes",
@@ -10,33 +10,13 @@
     },
     {
       "path": ".github/workflows/candidate-ci.yml",
-      "bytes": 5250,
-      "sha256": "d4ca82c9dc2eb71d8d436de8ee319efc924f03443e5c97aa5da69c7959607dfe"
+      "bytes": 1080,
+      "sha256": "0c3f6587e737db31721a86274b605cbfb17a375b334afd9034043938de1a9745"
     },
     {
       "path": ".gitignore",
       "bytes": 196,
       "sha256": "95ce4b240851c3b4b1ab4a22b1a743dadd45d85aa8881c3ffa69ca2c57251dd2"
-    },
-    {
-      "path": "README.md",
-      "bytes": 2873,
-      "sha256": "a05fef24ab53df65355db86b5b500f6ed80433fb9dde990a0c92605eb98e4662"
-    },
-    {
-      "path": "README_KO.md",
-      "bytes": 1488,
-      "sha256": "09e70781af92a6d9fa7224b87e42bb30f3b186c6b86c7345ab5a5dfce521db4f"
-    },
-    {
-      "path": "RUN_REPORT.json",
-      "bytes": 1201,
-      "sha256": "0111e408bc18a18a0b21f42cb8f242c7785bd99fdfb50a89259da268a141afad"
-    },
-    {
-      "path": "SKILL.md",
-      "bytes": 2082,
-      "sha256": "c4b2c685158799d515019c8fa17312120188a11c9032d303fa2ebf516b030d4c"
     },
     {
       "path": "adapters/ASTRA_INTEGRATION_CONTRACT.md",
@@ -47,11 +27,6 @@
       "path": "adapters/LEONARDO_INTEGRATION_CONTRACT.md",
       "bytes": 764,
       "sha256": "b701b5b93a50ecaafe4e070e8b108d81dbef6f56706f884a7b83e25a1700ba0d"
-    },
-    {
-      "path": "components/o_prep_v0_3/SOURCE_PIN.json",
-      "bytes": 328,
-      "sha256": "73ecbbe00cb396b21ac36bd22db4570ac07bd8b823749fbd25eacfc997762f15"
     },
     {
       "path": "components/o_prep_v0_3/schemas/decision.schema.json",
@@ -67,6 +42,11 @@
       "path": "components/o_prep_v0_3/schemas/signal.schema.json",
       "bytes": 6937,
       "sha256": "ed24ebccd7a9f529864695e60d916fc226472e28aa14d47b6b5f40d905cfbefa"
+    },
+    {
+      "path": "components/o_prep_v0_3/SOURCE_PIN.json",
+      "bytes": 328,
+      "sha256": "73ecbbe00cb396b21ac36bd22db4570ac07bd8b823749fbd25eacfc997762f15"
     },
     {
       "path": "components/o_prep_v0_3/src/evidence_bindings.py",
@@ -119,11 +99,6 @@
       "sha256": "9974563ed59e127405223f22c8f701cca8768769230e1e0ed2103f931ed94ee3"
     },
     {
-      "path": "examples/fixture/RUN_EXAMPLE.txt",
-      "bytes": 631,
-      "sha256": "8439a5da2932f8eefa11ffeabcbffebb141a101e6617508f7b050084a09befb1"
-    },
-    {
       "path": "examples/fixture/lock.json",
       "bytes": 342,
       "sha256": "e03ee48c28d0613b02abaaf87248d08a07226e3cd8444653ddac928a79da78bf"
@@ -169,6 +144,11 @@
       "sha256": "ce98e39c7a8398a7ead3e2f4b8ec23663729a58f7af0018c01b714eeaea39bcd"
     },
     {
+      "path": "examples/fixture/RUN_EXAMPLE.txt",
+      "bytes": 631,
+      "sha256": "8439a5da2932f8eefa11ffeabcbffebb141a101e6617508f7b050084a09befb1"
+    },
+    {
       "path": "examples/fixture/signal.json",
       "bytes": 1609,
       "sha256": "aece377111628cbfab288f3403d9d1f4fff2356caec1495f02d5f12061276ad5"
@@ -204,6 +184,21 @@
       "sha256": "d86d647ea1d72c8184346d49e2a2a695a5fecf61913b07e5ed7f07ac93b23b72"
     },
     {
+      "path": "README_KO.md",
+      "bytes": 1488,
+      "sha256": "09e70781af92a6d9fa7224b87e42bb30f3b186c6b86c7345ab5a5dfce521db4f"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2948,
+      "sha256": "c3cad4ca56b67392796eadaca4244297fd552985433e21c7bbb97a52a581c678"
+    },
+    {
+      "path": "RUN_REPORT.json",
+      "bytes": 1199,
+      "sha256": "971714d79167e9a845ea11b0723e95d605d506343c96e01bff3f3cc705696091"
+    },
+    {
       "path": "schemas/astra_capture_v2.schema.json",
       "bytes": 1277,
       "sha256": "7a54eb6e65e33b8f26daf0f038d95d3617c9ac3edb18448ab820eeac8f6aa98d"
@@ -229,6 +224,11 @@
       "sha256": "5685c3d5b69de27842dc834ed01ccc9f183287072751acea838ea92ec27dd7a0"
     },
     {
+      "path": "SKILL.md",
+      "bytes": 2082,
+      "sha256": "c4b2c685158799d515019c8fa17312120188a11c9032d303fa2ebf516b030d4c"
+    },
+    {
       "path": "tests/test_astra_manifest_v024.py",
       "bytes": 5640,
       "sha256": "d6a351fed4233dc042e94a5ccd9afc354459a505a5e0a76b59d11c38f64cfc14"
@@ -240,8 +240,8 @@
     },
     {
       "path": "tests/test_ci_contract.py",
-      "bytes": 1226,
-      "sha256": "84baaf366a83a96ec72a8978180e060a79f3860960051d58b1c4f9ec946fc683"
+      "bytes": 1439,
+      "sha256": "6cff4f63f24bf2830ee7ae00fcdc906dbea05cbdbf2b9757ec9b9dd9f0450e63"
     },
     {
       "path": "tests/test_connection_rebind.py",
@@ -279,14 +279,9 @@
       "sha256": "fdcd66d92cadf9c40f5ab3859a69cd44a09e8007183abd944635597117ce7fc5"
     },
     {
-      "path": "tests/test_public_mirror_audit.py",
-      "bytes": 12585,
-      "sha256": "aa1cdf9b5561ad9091e8b80f16572100a88850b1303ec73f6dd39ad3d3e98ac1"
-    },
-    {
       "path": "tests/test_public_privacy_check.py",
-      "bytes": 1228,
-      "sha256": "903663793d9ab0493f3d55c4e74a7cd592fe779aeb994631a3f6381e3975db83"
+      "bytes": 2552,
+      "sha256": "dd106f450b19355100ecc7a1cb880de85f19ffdd2395e2b3f8102a53879eaa42"
     },
     {
       "path": "tests/test_windows_vendor_output.py",
@@ -299,19 +294,9 @@
       "sha256": "15a55b6fed949c16b3e911983f27b853bea6d061f1afc003c571eb5a96c27681"
     },
     {
-      "path": "tools/audit_public_mirror.py",
-      "bytes": 11544,
-      "sha256": "7fb93203732bbebbf6f305e400486c30cf1518d2203ddb7bbe9c6f93156b65a4"
-    },
-    {
       "path": "tools/ci_check.py",
-      "bytes": 6228,
-      "sha256": "320c8e1d859f524c5cdb05d44bde3155224e643df482dc4201ee1388570dc119"
-    },
-    {
-      "path": "tools/expected_public_mirror_drift.json",
-      "bytes": 1551,
-      "sha256": "0e9e1903163d0a877634214e85a16622fb39383a5cf1e838efd5331f553fd788"
+      "bytes": 6222,
+      "sha256": "259a6147e5f0f2e85ecec06ce8fdaa69c5bed3b1be0648080c038eb5d9de2623"
     },
     {
       "path": "tools/local_node_preflight.py",
@@ -319,14 +304,9 @@
       "sha256": "1cd66344b6d6c332d82a25a0b1bd49efd9b70275bc4e7b0141017599d0c03ac6"
     },
     {
-      "path": "tools/public_astra_reference_smoke.py",
-      "bytes": 8659,
-      "sha256": "c7a900c3239e46348a78683c0e9d54805e6ce28c0da2e76abe63c76509abced2"
-    },
-    {
       "path": "tools/public_privacy_check.py",
-      "bytes": 1996,
-      "sha256": "eebf0a52cd717b4c102cc3a77ab18d9a70bce8f1b6da739ebae186ab2897d686"
+      "bytes": 3692,
+      "sha256": "3fd305cccfdefe5a61031bfeda9321edab023e5f27a088a16e74533f751c7dfd"
     },
     {
       "path": "tools/replay_simulation.py",

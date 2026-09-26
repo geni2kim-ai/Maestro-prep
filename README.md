@@ -18,6 +18,6 @@ The public archive intentionally omits any historical internal node IDs, real ev
 
 **Published public O-Prep compatibility code has changed:** its optional transported-archive example is genericized. Its core decision and receipt-binding functions remain subject to synthetic regression tests; any existing approved original O-Prep must be verified locally against its own independent owner pin. Do not use this public source's `SOURCE_PIN.json` to attest to the original vendor installation.
 
-Public CI may intentionally show a separate reference-source integrity HOLD: published historical reference hashes are not re-signed by Maestro. An offline test PASS is never live node, rollout or reviewer approval.
+Public CI runs only this repository's offline source and synthetic tests. Independent approval and provenance of external dependencies must be checked through separately controlled owner pins; CI success is never authorization to operate a live node, roll out code, or waive reviewer gates.
 
 See `SKILL.md` and `README_KO.md` for workflow-independent operation. Privacy regression checks run in CI and against the distributable file inventory. Old public Git commits, PR discussions, CI logs and downloaded copies are separate historical records: a new clean working tree does not delete them.

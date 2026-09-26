@@ -1,24 +1,25 @@
 {
   "schema": "MAESTRO_PUBLIC_CANDIDATE_REPORT_V1",
-  "version": "0.2.9-r2-public-redacted-candidate",
+  "version": "0.2.9-r3-public-minimal-source-candidate",
   "scope": "CURRENT_SANITIZED_PUBLIC_SOURCE_AND_SYNTHETIC_ONLY",
   "local_validation": {
-    "maestro_unit_tests": 177,
-    "passed": 176,
+    "maestro_unit_tests": 160,
+    "passed": 159,
     "skipped": 1,
     "public_compat_component_tests": 61,
     "generic_archive_regressions": 18,
-    "privacy_scanner_regressions": 5,
-    "privacy_current_source": "PASS"
+    "privacy_scanner_regressions": 10,
+    "privacy_current_source": "CHECK_IN_CI"
   },
   "functional_changes": [
     "NONFUNCTIONAL_INTERNAL_NAMES_REMOVED",
-    "HISTORICAL_PRIVATE_EXPORT_SPECIFIC_AUDITOR_REPLACED_WITH_GENERIC_OWNER_PINNED_ARCHIVE_BYTE_CHECK",
-    "OPTIONAL_TRANSPORTED_PACKET_AUDIT_RENAMED_AND_GENERALIZED_IN_PUBLIC_COMPAT_COMPONENT"
+    "HISTORICAL_EXTERNAL_SOURCE_AUDIT_REMOVED_FROM_PUBLIC_CI",
+    "GENERIC_OWNER_PINNED_ARCHIVE_BYTE_CHECK_RETAINED",
+    "BINARY_AND_UTF16_PUBLIC_PRIVACY_SCANNING_ADDED"
   ],
   "original_prep_component_byte_pin": "NOT_EQUIVALENT_PUBLIC_DERIVATIVE",
   "original_private_archive_adapter": "REQUIRES_SEPARATELY_APPROVED_LOCAL_PROFILE",
-  "public_reference_integrity": "HOLD_UPSTREAM_HISTORICAL_MANIFEST_DRIFT",
+  "external_reference_integrity": "NOT_RUN_IN_PUBLIC_PROFILE_REQUIRES_OWNER_PIN",
   "approved_router_execution": "NOT_RUN",
   "approved_local_planning": "NOT_RUN",
   "approved_original_evidence_component": "NOT_RUN",
