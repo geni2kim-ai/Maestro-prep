@@ -11,7 +11,7 @@
     {
       "path": ".github/workflows/candidate-ci.yml",
       "bytes": 1080,
-      "sha256": "0c3f6587e737db31721a86274b605cbfb17a375b334afd9034043938de1a9745"
+      "sha256": "3ba2cea50aedcfdf550ddac3f229f50fd9e63980e300de5863d560c36f503642"
     },
     {
       "path": ".gitignore",
