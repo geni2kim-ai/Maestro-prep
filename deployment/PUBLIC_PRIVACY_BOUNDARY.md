@@ -1,0 +1,5 @@
+# Scope of the sanitized public profile
+
+Published source contains no private node IDs, team routing labels, internal installation directories, private repository URLs or historical private-export member names. Only published functional contracts and synthetic fixtures remain. External router and planning product names identify dependencies but not node topology. Optional transport archive evidence was generalized into a public generic verifier; it cannot validate private provider semantics. Public O-Prep is a modified compatibility derivative, **not** the original separately trusted vendor pin. Before a real deployment, the owner must independently approve the original installed component and its private contracts.
+
+This scrub is a current-file publication control, **not** a promise that prior public commits, CI logs, pull request discussions, cached clones or prior downloads have been erased. Coordinate any full history purge with repository and service administrators before treating previous details as unpublished.

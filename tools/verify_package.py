@@ -6,6 +6,7 @@ through a separate trusted channel before treating the inventory as authoritativ
 """
 from pathlib import Path
 import hashlib
+import os
 import json
 import re
 import sys
@@ -13,17 +14,32 @@ import sys
 EXCLUDE={'MANIFEST.json','SHA256SUMS.txt'}
 
 def scan(root:Path) -> list[dict]:
+    """Scan distributable source, not Git metadata or execution caches.
+
+    Actions checks out a .git directory, whereas the offline ZIP does not.
+    Excluding Git metadata makes the exact same source manifest check work in
+    either location without silently excluding any new distributable source.
+    """
     out=[]
-    for p in sorted(root.rglob('*')):
-        relative=p.relative_to(root).as_posix()
-        if '__pycache__' in p.parts or p.suffix=='.pyc':
-            continue  # Python-generated execution caches are not distributed
-        if p.is_symlink():raise ValueError('SYMLINK_FORBIDDEN')
-        if not p.is_file():continue
-        if relative in EXCLUDE:continue
-        data=p.read_bytes()
-        out.append({'path':relative,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()})
-    return out
+    skip_dirs={'.git','__pycache__','.pytest_cache','.venv','venv'}
+    for directory, dirs, files in os.walk(root,followlinks=False):
+        base=Path(directory)
+        for name in dirs:
+            if name not in skip_dirs and (base/name).is_symlink():
+                raise ValueError('SYMLINK_FORBIDDEN')
+        dirs[:]=[name for name in dirs if name not in skip_dirs]
+        for filename in files:
+            p=base/filename
+            relative=p.relative_to(root).as_posix()
+            if relative in EXCLUDE or p.suffix=='.pyc':
+                continue
+            if p.is_symlink():
+                raise ValueError('SYMLINK_FORBIDDEN')
+            if not p.is_file():
+                continue
+            data=p.read_bytes()
+            out.append({'path':relative,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+    return sorted(out,key=lambda r:r['path'])
 
 def verify(root:Path) -> dict:
     manifest=json.loads((root/'MANIFEST.json').read_text(encoding='utf-8'))

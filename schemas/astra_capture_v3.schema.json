@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASTRA_PREP_CAPTURE_V3 (Maestro node adapter receipt, NOT Astra official output)",
+  "description": "A new receipt for replayable immutable origin-route bytes. Do not modify historical V1/V2 captures in place.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "work_unit", "node_id", "astra_skill_sha256", "plan_sha256",
+    "plan_file", "status", "captured_at_utc", "task_sha256",
+    "origin_route_output_sha256", "origin_route_output_file", "origin_route_capture_file"
+  ],
+  "properties": {
+    "schema": {"const": "ASTRA_PREP_CAPTURE_V3"},
+    "work_unit": {"type": "string", "minLength": 1, "maxLength": 160},
+    "node_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "astra_skill_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "plan_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "plan_file": {"type": "string", "minLength": 1},
+    "status": {"const": "READY_FOR_LOCAL_CANDIDATE_WORK"},
+    "captured_at_utc": {"type": "string", "format": "date-time"},
+    "task_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "origin_route_output_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "origin_route_output_file": {
+      "type": "string", "minLength": 1,
+      "$comment": "Evidence-root-relative immutable normalized origin route bytes; runtime rejects escapes/symlinks."
+    },
+    "origin_route_capture_file": {
+      "type": "string", "minLength": 1,
+      "$comment": "Evidence-root-relative immutable origin Leonardo route capture; runtime verifies exact route SHA and owner-pinned lock fields."
+    }
+  }
+}
