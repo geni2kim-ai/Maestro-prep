@@ -83,10 +83,10 @@ def _is_safe_member(info: zipfile.ZipInfo) -> bool:
     return True
 
 
-def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
-    """Audit transported 4A evidence bytes. Report local evidence discrepancies only.
+def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
+    """Audit transported SUBJECT evidence bytes. Report local evidence discrepancies only.
 
-    No original 4A router, host SQLite DB, or raw runner is present in this bundle;
+    No original SUBJECT router, host SQLite DB, or raw runner is present in this bundle;
     the reported router/test/host assertions remain PRODUCER_REPORTED.
     """
     path = Path(zip_path)
@@ -159,8 +159,8 @@ def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
     def flag(code: str, severity: str, detail: str) -> None:
         findings.append({"code": code, "severity": severity, "detail": detail})
 
-    rows_a = ledger.get("four_c_four_a_packet_ledger", [])
-    rows_b = ledger.get("four_x_four_a_packet_ledger", [])
+    rows_a = ledger.get("peer_packet_ledger", [])
+    rows_b = ledger.get("secondary_packet_ledger", [])
     if not isinstance(rows_a, list) or not isinstance(rows_b, list):
         raise OPrepError("packet_ledger_shape_invalid")
     rows = rows_a + rows_b
@@ -169,17 +169,17 @@ def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
             raise OPrepError("invalid_delivery_row_identity")
         if not isinstance(row.get("sender_node_id"), str) or not isinstance(row.get("receiver_node_id"), str):
             raise OPrepError("invalid_delivery_row_nodes")
-        if (row["sender_node_id"] == "4A") == (row["receiver_node_id"] == "4A"):
-            raise OPrepError("invalid_4a_ledger_direction")
+        if (row["sender_node_id"] == "SUBJECT") == (row["receiver_node_id"] == "SUBJECT"):
+            raise OPrepError("invalid_subject_ledger_direction")
     ids = [row.get("delivery_id") for row in rows]
     if len(ids) != len(set(ids)):
         flag("DUPLICATE_DELIVERY_ID", "hold_evidence", "Repeated delivery identity in supplied ledger")
-    sent = sum(row.get("sender_node_id") == "4A" for row in rows)
-    received = sum(row.get("receiver_node_id") == "4A" for row in rows)
+    sent = sum(row.get("sender_node_id") == "SUBJECT" for row in rows)
+    received = sum(row.get("receiver_node_id") == "SUBJECT" for row in rows)
     observed_lifetime = {"sent": sent, "received": received, "deliveries": len(rows)}
     reported = snapshot["packet_metrics_lifetime"]
     if ((sent, received, len(rows)) !=
-       (reported["packets_sent_by_4a"], reported["packets_received_by_4a"], reported["packet_deliveries_involving_4a"])):
+       (reported["packets_sent_by_subject"], reported["packets_received_by_subject"], reported["packet_deliveries_involving_subject"])):
         flag("LIFETIME_METRIC_MISMATCH", "hold_evidence", "Reported totals differ from supplied ledger")
 
     window = snapshot["packet_metrics_72h_window"]
@@ -197,12 +197,12 @@ def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
         if start <= created <= end:
             counted.append(row)
     window_observed = {
-        "sent": sum(row.get("sender_node_id") == "4A" for row in counted),
-        "received": sum(row.get("receiver_node_id") == "4A" for row in counted),
+        "sent": sum(row.get("sender_node_id") == "SUBJECT" for row in counted),
+        "received": sum(row.get("receiver_node_id") == "SUBJECT" for row in counted),
         "total": len(counted),
     }
     if (window_observed["sent"], window_observed["received"], window_observed["total"]) != (
-       window["packets_sent_by_4a"], window["packets_received_by_4a"], window["total_packets_in_window"]):
+       window["packets_sent_by_subject"], window["packets_received_by_subject"], window["total_packets_in_window"]):
         flag("WINDOW_LEDGER_MISMATCH", "hold_evidence",
              "Reported window totals differ from raw recorded timestamps; historically malformed timestamps are not silently corrected")
 
@@ -215,19 +215,16 @@ def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
     if not any(s.get("total_tests") == test_baseline["total_tests"] for s in test_suites):
         flag("MISSING_CANONICAL_RECEIPT", "hold_evidence", "Canonical reported test count lacks matching suite summary")
     # A delivered receipt is a producer assertion, not a raw runner transcript.
-    flag("RAW_HOST_VALIDATION_NOT_TRANSPORTED", "info", "Unit-test and router pass counts are 4A reported; host executable and runner output not transported")
+    flag("RAW_HOST_VALIDATION_NOT_TRANSPORTED", "info", "Unit-test and router pass counts are SUBJECT reported; host executable and runner output not transported")
     flag("DEDUP_RECORD_NOT_PROVEN", "hold_closeout", "Envelope idempotency fields do not prove canonical dedup-table persistence; F3 remains unresolved")
     if snapshot.get("queue_status_disk", {}).get("incoming", {}).get("count", 0) > 0:
         flag("INCOMING_NOT_EQ_PROCESSED", "info", "Zero pending does not establish that every incoming item is substantively processed")
 
     if peer_audit_path:
         peer = _read_json(Path(peer_audit_path).read_bytes(), "peer_archive_audit")
-        prior = peer["4c"]["observed_snapshot"]
-        # The handoff's 35-received/14-sent wording is contrary to prior archive re-count.
-        handoff = content["handoff.md"].decode("utf-8", errors="replace")
-        phrase = "35 received / 14 sent"
-        if phrase in handoff and prior.get("from_4c") == 35 and prior.get("to_4c") == 14:
-            flag("PEER_4C_DIRECTION_REVERSED", "hold_evidence", "4A handoff reverses previously recomputed 4C sender/receiver counts")
+        prior = peer["peer"]["observed_snapshot"]
+        if peer.get('explicit_reversed_direction_proven') is True and isinstance(prior,dict):
+            flag('PEER_DIRECTION_REVERSED','hold_evidence','Independent peer evidence reports a direction reversal')
 
     return {
         "schema": "O_PREP_AUDIT_V1", "o_prep_version": VERSION,
@@ -235,7 +232,7 @@ def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
         "manifest_verified": True,
         "manifest_entry_count_excluding_self": len(entries),
         "zip_entry_count_including_manifest": len(content),
-        "source_provenance": "4A_TRANSPORTED_EVIDENCE_ONLY",
+        "source_provenance": "SUBJECT_TRANSPORTED_EVIDENCE_ONLY",
         "router_status": "NOT_RUN", "host_runtime_status": "NOT_RUN",
         "reported_router_version": router.get("installed_router", {}).get("package_version"),
         "reported_test_total": test_baseline.get("total_tests"),
@@ -244,7 +241,7 @@ def audit_4a_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
         "open_gate_statuses": [g.get("status") for g in gates.get("gates", [])],
         "observed_from_transported_ledger": {
             "lifetime": observed_lifetime, "reported_window": {
-                "sent": window["packets_sent_by_4a"], "received": window["packets_received_by_4a"],
+                "sent": window["packets_sent_by_subject"], "received": window["packets_received_by_subject"],
                 "total": window["total_packets_in_window"]},
             "window_using_literal_recorded_timestamps": window_observed,
         },
@@ -496,7 +493,7 @@ def _check_out_path(path: Path) -> None:
 def _main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Offline candidate-only O-Prep (no host effects)")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    p_audit = sub.add_parser("audit-4a", help="read-only transported archive verification")
+    p_audit = sub.add_parser("audit-transport", help="read-only transported archive verification")
     p_audit.add_argument("--zip", required=True)
     p_audit.add_argument("--peer-audit", help="optional earlier independent minimal archive audit JSON")
     p_audit.add_argument("--out", help="explicit output path outside active shared skill tree")
@@ -512,8 +509,8 @@ def _main(argv=None) -> int:
         item.add_argument("--output-root", help="required with --out; must be pre-existing isolated directory")
     args = parser.parse_args(argv)
     try:
-        if args.cmd == "audit-4a":
-            result = audit_4a_bundle(args.zip, args.peer_audit)
+        if args.cmd == "audit-transport":
+            result = audit_transport_bundle(args.zip, args.peer_audit)
         elif args.cmd == "evaluate-bound":
             result = evaluate_bound_signal(_read_json(Path(args.signal).read_bytes(), "signal"),
                                            args.receipt_index, args.evidence_root)

@@ -1,30 +1,7 @@
-# Maestro-Prep
+# Maestro-Prep initial public candidate (sanitized profile)
 
-**Maestro-Prep v0.1** is a public, pre-release skill package that coordinates **Astra-Prep** (planning) and **O-Prep** (evidence-bound checks) through a common Leonardo-oriented entry point.
+The default branch retains the **original initial coordination surface**, not the newer unmerged candidate available in the Draft pull request. This privacy-only source refresh removes nonfunctional internal node labels, local installation path examples, private workflow narratives and the historical archive-specific optional command name.
 
-This is an **offline, candidate-only** implementation. It does **not** include the official Astra-Prep source, a Leonardo router binary, production data, node credentials, or private node logs. The included comparisons and tests are synthetic and are not proof of live-node integration.
+Core coordinator/evidence evaluation remains offline-only and candidate-only. The included public O-Prep is a **redacted compatibility derivative**: its optional transport audit sample accepts generic subject/peer labels instead of any legacy node-specific records. Its source pin is valid **only for these publicly distributed bytes**. The original separately approved component must be independently owner-pinned on an actual host.
 
-## Getting started
-
-See [SKILL.md](SKILL.md) for the skill contract and [README_KO.md](README_KO.md) for the Korean guide.
-
-The complete v0.1 candidate source is available directly in this repository, including the O-Prep component, schemas, synthetic examples, tests, integration contracts, and manifests. Clone this repository to run the offline checks.
-
-From the extracted directory:
-
-```bash
-python tools/verify_package.py .
-python -m unittest discover -s tests -q
-python -m unittest discover -s components/o_prep_v0_3/tests -q
-python tools/replay_simulation.py
-```
-
-## Integration boundary
-
-The official Astra-Prep version and each node's approved Leonardo router/policy must be independently obtained, verified, and integrated in a private, authorized environment. This package does not automatically install to shared, production, or live nodes, and its output is not an authorization to deploy.
-
-## Privacy
-
-This repository contains generalized implementation, documentation, and synthetic fixtures only. **Do not commit private node codebases, real logs, secrets, credentials, production DBs, or unauthorized evidence bundles.**
-
-Public visibility does not, by itself, grant a software reuse license. No software license is declared in this initial candidate publication.
+Run `python -m maestro_prep.cli component-check`, `python -m unittest discover -s tests -q`, and `python tools/public_privacy_check.py` to inspect current public source. No runtime, deployment, upstream manifest remediation or independent-review authority is implied. Historical commits, caches, CI logs and old downloaded copies are not purged by a source refresh.

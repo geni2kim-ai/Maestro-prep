@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from o_prep import OPrepError, audit_4a_bundle, evaluate_signal, validate_signal, _check_out_path
+from o_prep import OPrepError, audit_transport_bundle, evaluate_signal, validate_signal, _check_out_path
 
 Z = '0' * 64
 TS = '2026-09-25T00:00:00Z'
@@ -51,7 +51,7 @@ class DecisionGateTests(unittest.TestCase):
                 self.assertFalse(r['host_mutation_authorized'])
                 self.assertEqual(r['live_effect'], 'NOT_RUN')
 
-    def test_eight_4a_probes_plus_fail_closed_cases(self):
+    def test_eight_subject_probes_plus_fail_closed_cases(self):
         probes = [
             ('bad_z_timestamp', 'evidence', 'timestamp_provenance_verified', False, 'HOLD_EVIDENCE'),
             ('mtime_without_verified_provenance', 'evidence', 'timestamp_provenance_verified', False, 'HOLD_EVIDENCE'),
@@ -153,16 +153,16 @@ class ArchiveAuditTests(unittest.TestCase):
         files = {n: b'{}' for n in names}
         files.update({
             'node_snapshot.json': json.dumps({
-                'packet_metrics_lifetime': {'packets_sent_by_4a':1, 'packets_received_by_4a':0,'packet_deliveries_involving_4a':1},
+                'packet_metrics_lifetime': {'packets_sent_by_subject':1, 'packets_received_by_subject':0,'packet_deliveries_involving_subject':1},
                 'packet_metrics_72h_window': {'window_start_utc':'2026-09-24T00:00:00Z',
-                    'window_end_utc':'2026-09-25T23:00:00Z', 'packets_sent_by_4a':1,'packets_received_by_4a':0,'total_packets_in_window':1},
+                    'window_end_utc':'2026-09-25T23:00:00Z', 'packets_sent_by_subject':1,'packets_received_by_subject':0,'total_packets_in_window':1},
                 'regression_test_baseline': {'passed':1,'skipped':0,'failures':0,'errors':0,'total_tests':1},
                 'queue_status_disk':{'incoming':{'count':0}}}).encode(),
             'router_policy_manifest.json': json.dumps({'installed_router': {'package_version':'synthetic'}}).encode(),
             'episodes.json': b'[]', 'branch_probes.json':b'[]',
             'packet_reconciliation.json': json.dumps({
-                'four_c_four_a_packet_ledger':[{'delivery_id':'id','sender_node_id':'4A','receiver_node_id':'4C','created_at':TS}],
-                'four_x_four_a_packet_ledger':[]}).encode(),
+                'peer_packet_ledger':[{'delivery_id':'id','sender_node_id':'SUBJECT','receiver_node_id':'PEER','created_at':TS}],
+                'secondary_packet_ledger':[]}).encode(),
             'test_receipts.json': b'{"test_suites":[{"total_tests":1}]}',
             'open_gates.json':b'{"gates":[]}', 'evidence_ledger.json':b'{"claims":[]}',
             'handoff.md':b'Synthetic test fixture',
@@ -184,7 +184,7 @@ class ArchiveAuditTests(unittest.TestCase):
     def test_synthetic_archive_passes_manifest_and_metrics(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'synthetic.zip';self.make_archive(p)
-            r=audit_4a_bundle(str(p))
+            r=audit_transport_bundle(str(p))
             self.assertTrue(r['manifest_verified'])
             self.assertEqual(r['observed_from_transported_ledger']['window_using_literal_recorded_timestamps']['total'],1)
             self.assertNotIn('WINDOW_LEDGER_MISMATCH',[f['code'] for f in r['findings']])
@@ -193,22 +193,22 @@ class ArchiveAuditTests(unittest.TestCase):
     def test_manifest_hash_tamper_blocked(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'synthetic.zip';self.make_archive(p,tamper=True)
-            with self.assertRaisesRegex(OPrepError,'hash'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'hash'):audit_transport_bundle(str(p))
 
     def test_extra_member_blocked(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'synthetic.zip';self.make_archive(p,member_override='unexpected.json')
-            with self.assertRaises(OPrepError):audit_4a_bundle(str(p))
+            with self.assertRaises(OPrepError):audit_transport_bundle(str(p))
 
     def test_path_traversal_blocked_without_extracting(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'synthetic.zip';self.make_archive(p,unsafe_member='../escape.txt')
-            with self.assertRaisesRegex(OPrepError,'unsafe'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'unsafe'):audit_transport_bundle(str(p))
 
     def test_symlink_member_blocked(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'synthetic.zip';self.make_archive(p,unsafe_member='symlink')
-            with self.assertRaisesRegex(OPrepError,'unsafe'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'unsafe'):audit_transport_bundle(str(p))
 
     def test_duplicate_member_blocked(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -216,7 +216,7 @@ class ArchiveAuditTests(unittest.TestCase):
             with zipfile.ZipFile(p,'w') as z:
                 z.writestr('manifest.json','{}')
                 z.writestr('Manifest.json','{}')
-            with self.assertRaisesRegex(OPrepError,'duplicate'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'duplicate'):audit_transport_bundle(str(p))
 
     def test_expansion_limit_before_read(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -224,13 +224,13 @@ class ArchiveAuditTests(unittest.TestCase):
             with zipfile.ZipFile(p,'w',zipfile.ZIP_DEFLATED) as z:
                 z.writestr('manifest.json','{}')
                 z.writestr('data.json','x'*(11*1024*1024))
-            with self.assertRaisesRegex(OPrepError,'expansion'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'expansion'):audit_transport_bundle(str(p))
 
     def test_immutability_of_input_archives(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'synthetic.zip';self.make_archive(p)
             h1=hashlib.sha256(p.read_bytes()).digest()
-            audit_4a_bundle(str(p))
+            audit_transport_bundle(str(p))
             self.assertEqual(h1,hashlib.sha256(p.read_bytes()).digest())
 
     def test_outside_shared_skill_dir_allowed_inside_blocked(self):

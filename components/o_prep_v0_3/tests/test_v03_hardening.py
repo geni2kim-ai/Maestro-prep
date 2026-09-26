@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 sys.path.insert(0,str(ROOT/'tests'))
-from o_prep import (OPrepError, _read_json, _secure_out_file, audit_4a_bundle,
+from o_prep import (OPrepError, _read_json, _secure_out_file, audit_transport_bundle,
                     evaluate_signal, evaluate_bound_signal, validate_signal)
 from evidence_bindings import BindingError, verify_local_bindings
 from test_o_prep import signal, ArchiveAuditTests
@@ -231,7 +231,7 @@ class V03ArchiveTests(unittest.TestCase):
             members['manifest.json']=manifest.replace('{','{"total_entries":10,',1).encode()
             with __import__('zipfile').ZipFile(p,'w') as z:
                 for n,b in members.items():z.writestr(n,b)
-            with self.assertRaisesRegex(OPrepError,'duplicate'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'duplicate'):audit_transport_bundle(str(p))
 
     def test_bad_ledger_direction_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -239,7 +239,7 @@ class V03ArchiveTests(unittest.TestCase):
             with __import__('zipfile').ZipFile(p) as z:
                 members={n:z.read(n) for n in z.namelist()}
             obj=json.loads(members['packet_reconciliation.json'])
-            obj['four_c_four_a_packet_ledger'][0]['receiver_node_id']='4A'
+            obj['peer_packet_ledger'][0]['receiver_node_id']='SUBJECT'
             members['packet_reconciliation.json']=json.dumps(obj).encode()
             manifest=json.loads(members['manifest.json'])
             for row in manifest['entries']:
@@ -249,7 +249,7 @@ class V03ArchiveTests(unittest.TestCase):
             members['manifest.json']=json.dumps(manifest).encode()
             with __import__('zipfile').ZipFile(p,'w') as z:
                 for n,b in members.items():z.writestr(n,b)
-            with self.assertRaisesRegex(OPrepError,'direction'):audit_4a_bundle(str(p))
+            with self.assertRaisesRegex(OPrepError,'direction'):audit_transport_bundle(str(p))
 
 
 if __name__=='__main__':unittest.main()
