@@ -1,0 +1,11 @@
+{
+  "schema": "MAESTRO_OWNER_GATE_TEMPLATE_V1",
+  "candidate_only": true,
+  "owner_approved": false,
+  "installed_component_pins": "EXTERNAL_REQUIRED",
+  "approved_local_adapter": "NOT_RUN",
+  "host_test": "NOT_RUN",
+  "independent_review": "NOT_RUN",
+  "rollback_rehearsal": "NOT_RUN",
+  "deployment": "NOT_RUN"
+}

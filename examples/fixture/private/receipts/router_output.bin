@@ -1,1 +1,1 @@
-{"route":"synthetic"}
+{"execution_state":"READY","intent":"NEW_PLAN","mandatory_skills":["o-prep","astra-prep"],"node_id":"synthetic","plan_gate":"CALL_ASTRA_PREP","policy_sha256":"fecb658310c69841f5ddc94bed62ded9a39b25d7af910da94802cacbf067e23f","review_required":false,"schema":"LEONARDO_ROUTE_DECISION_V1","stage":"PLAN","task_sha256":"ccc67a9bfb4c2533d29dfacb86eaa0bd75c4774fa2e69dff513fb9e0016bdf76","work_unit":"SYNTHETIC-UNIT-TEST"}

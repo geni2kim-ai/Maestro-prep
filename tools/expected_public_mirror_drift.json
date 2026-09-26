@@ -1,0 +1,19 @@
+{
+  "schema": "ASTRA_PUBLIC_MIRROR_KNOWN_DRIFT_V2",
+  "baseline_commit": "54b0444002613309a6a47af281aa70f69202bd6d",
+  "manifest_sha256": "e9bfc33a68d08bb8ec45d0c40e49742ea67006cb3205dafb7f6a689e5e6fc85b",
+  "declared_aggregate_sha256": "0818dc9d17856042d380116baac9d7603097269651b5ab5759bfc9bb7efe476d",
+  "observed_aggregate_sha256": "be0e15128b8c6029112370340d09859e131666554f19cc1f9dfa5c1a2e93faa3",
+  "known_mismatch_sha256": {
+    "CANDIDATE_README.md": "cc3911db8d4df667a9ed847f5480b36de0eceda9e65288040e67d1c30c867f58",
+    "SKILL.md": "dd68bae63896c955fd0de59d255c85fa8c018ad955a7d53c006bc10e4f0a9d57",
+    "references/domain-checks.md": "1aa0d94742bc2c88ec66a271d3ffe37b8b36b82027d6d489301afb750159efd5",
+    "scripts/validate_prework.py": "f1feb40e93aa7d8c46ed48352b5ef36b112538033787b208dc7df3a687e5cf8d",
+    "tests/fixtures/invalid_control_copy_unverified.json": "642edad0ca3ef61f99c9544757b1b3f82564d5af8236f5160fc19d21e048c848",
+    "tests/fixtures/invalid_coverage_missing_demonstration.json": "b12a32ee2bd33cc6d409c3aa91e4c4859b32f2bd7c8e461e7f5b13d93b102594",
+    "tests/fixtures/invalid_evidence_output_immutability.json": "9fa636b6eeb85655813759feb394672539cdef2cb2a952e5f7b98255f5409cfb",
+    "tests/fixtures/invalid_unknown_top_key.json": "1f08ed3330be517efb7bfe19c7a2b3424e1ea202d8a84ae0353ab622a86ac7ba",
+    "tests/fixtures/valid_v71_full.json": "c2aaf0e2f6561e060fee7ba4b30195481ece643d46afcac9ba2c2ad2e834247f",
+    "tests/test_validate_prework.py": "20d35d3d040a857dfc027d42d6330cc9014c9cd171d080a4bce030e1f0f2ec7f"
+  }
+}

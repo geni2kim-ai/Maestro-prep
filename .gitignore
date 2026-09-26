@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage/
+.venv/
+venv/
+.DS_Store
+# Keep real node evidence and local attestation outside this public source tree.
+private_evidence/
+local_node_run/

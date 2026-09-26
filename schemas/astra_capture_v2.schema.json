@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASTRA_PREP_CAPTURE_V2 (Maestro node adapter only; NOT native Astra-Prep)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "work_unit", "node_id", "astra_skill_sha256",
+               "plan_sha256", "plan_file", "status", "captured_at_utc",
+               "task_sha256", "origin_route_output_sha256"],
+  "properties": {
+    "schema": {"const": "ASTRA_PREP_CAPTURE_V2"},
+    "work_unit": {"type": "string", "minLength": 1},
+    "node_id": {"type": "string", "minLength": 1},
+    "astra_skill_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "plan_file": {"type": "string", "minLength": 1,
+                  "$comment": "Must be a bounded, relative, non-symlinked evidence-root path; enforced at runtime."},
+    "status": {"const": "READY_FOR_LOCAL_CANDIDATE_WORK",
+               "$comment": "Producer status, NOT a native Astra approval or deployment authorization."},
+    "captured_at_utc": {"type": "string", "format": "date-time"},
+    "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "origin_route_output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

@@ -1,3 +1,3 @@
-SYNTHETIC ONLY: run from package root:
-python -m maestro_prep.cli decide --work examples/fixture/work.json --lock examples/fixture/lock.json --o-signal examples/fixture/signal.json --receipt-index examples/fixture/private/receipt_index.json --evidence-root examples/fixture/private --astra-skill examples/fixture/planner_stub/SKILL.md --astra-plan-receipt astra_capture.json --leonardo-route route_capture.json
-This proves LOCAL BYTES only, not real Astra/Leonardo execution.
+SYNTHETIC ONLY, NOT AN APPROVED NODE INSTALLATION. Run from package root:
+python -m maestro_prep.cli decide --offline-replay --work examples/fixture/work.json --lock examples/fixture/lock.json --o-signal examples/fixture/signal.json --receipt-index examples/fixture/private/receipt_index.json --evidence-root examples/fixture/private --astra-skill examples/fixture/planner_stub/SKILL.md --astra-plan-receipt astra_capture.json --leonardo-route route_capture.json
+Expected: HOLD_INTEGRATION / HOLD_ASTRA_OFFICIAL_PIN_MISSING because no approved Astra validator is bundled. Do NOT rewrite this synthetic lock to claim node approval.

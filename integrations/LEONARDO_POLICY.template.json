@@ -3,16 +3,41 @@
   "installation": "NOT_INSTALLED_OWNER_REVIEW_REQUIRED",
   "entry_skill": "maestro-prep",
   "work_types": {
-    "NEW_PLAN": {"astra": "REQUIRED_IF_OFFICIAL_AVAILABLE", "o_prep": "MANDATORY"},
-    "REPLAN": {"astra": "REQUIRED_IF_OFFICIAL_AVAILABLE", "o_prep": "MANDATORY"},
-    "REUSE_PLAN": {"astra": "REUSE_ONLY_WITH_EXACT_PLAN_PIN", "o_prep": "MANDATORY"},
-    "READ_ONLY": {"astra": "OPTIONAL", "o_prep": "LOCAL_AUDIT_OR_BOUND_GATE"}
+    "NEW_PLAN": {
+      "astra": "REQUIRED_IF_OFFICIAL_AVAILABLE",
+      "o_prep": "MANDATORY"
+    },
+    "REPLAN": {
+      "astra": "REQUIRED_IF_OFFICIAL_AVAILABLE",
+      "o_prep": "MANDATORY"
+    },
+    "REUSE_PLAN": {
+      "astra": "REUSE_ONLY_WITH_EXACT_PLAN_PIN",
+      "o_prep": "MANDATORY"
+    },
+    "READ_ONLY": {
+      "astra": "OPTIONAL",
+      "o_prep": "LOCAL_AUDIT_OR_BOUND_GATE"
+    }
   },
-  "mandatory_checkpoints": ["PLAN", "EXECUTE", "PUBLISH", "CLOSE"],
+  "mandatory_checkpoints": [
+    "PLAN",
+    "EXECUTE",
+    "PUBLISH",
+    "CLOSE"
+  ],
   "o_prep_may_be_skipped_by_router": false,
   "on_o_prep_unavailable": "HOLD_O_MODULE_MISSING",
   "on_astra_unavailable_new_plan": "HOLD_PLAN_MODULE_MISSING",
   "on_astra_unavailable_read_only": "ALLOW_EXISTING_READ_ONLY_AUDIT_ONLY",
   "on_contract_hash_mismatch": "HOLD_INTEGRATION",
-  "permissions": {"create_runtime_authority": false, "change_live": false, "publish_packet": false}
+  "permissions": {
+    "create_runtime_authority": false,
+    "change_live": false,
+    "publish_packet": false
+  },
+  "normalized_output_contract": "LEONARDO_ROUTE_DECISION_V1",
+  "normalized_output_schema": "schemas/leonardo_route_decision.schema.json",
+  "route_max_age_seconds_candidate_only": 14400,
+  "source_of_authority": "OWNER_APPROVAL_REQUIRED_NOT_OFFICIAL_LEONARDO"
 }

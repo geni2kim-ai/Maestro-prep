@@ -1,1 +1,27 @@
-{"schema": "O_PREP_RECEIPT_INDEX_V1", "work_unit": "SYNTHETIC-UNIT-TEST", "node_id": "synthetic", "stage": "PLAN", "captured_at_utc": "2026-09-25T00:00:00Z", "receipts": [{"role": "router_input", "path": "receipts/router_input.bin", "sha256": "ccc67a9bfb4c2533d29dfacb86eaa0bd75c4774fa2e69dff513fb9e0016bdf76", "size_bytes": 23}, {"role": "router_policy", "path": "receipts/router_policy.bin", "sha256": "fecb658310c69841f5ddc94bed62ded9a39b25d7af910da94802cacbf067e23f", "size_bytes": 25}, {"role": "router_output", "path": "receipts/router_output.bin", "sha256": "05e7c8f116eed6df09fe609195240dd991eb238c74709581a33e2c31eedf857d", "size_bytes": 21}]}
+{
+  "schema": "O_PREP_RECEIPT_INDEX_V1",
+  "work_unit": "SYNTHETIC-UNIT-TEST",
+  "node_id": "synthetic",
+  "stage": "PLAN",
+  "captured_at_utc": "2026-09-25T00:00:00Z",
+  "receipts": [
+    {
+      "role": "router_input",
+      "path": "receipts/router_input.bin",
+      "sha256": "ccc67a9bfb4c2533d29dfacb86eaa0bd75c4774fa2e69dff513fb9e0016bdf76",
+      "size_bytes": 23
+    },
+    {
+      "role": "router_policy",
+      "path": "receipts/router_policy.bin",
+      "sha256": "fecb658310c69841f5ddc94bed62ded9a39b25d7af910da94802cacbf067e23f",
+      "size_bytes": 25
+    },
+    {
+      "role": "router_output",
+      "path": "receipts/router_output.bin",
+      "sha256": "34255b0129ef575242570a34eb9bce36df0101a5ac92e8b62167582043588b59",
+      "size_bytes": 417
+    }
+  ]
+}

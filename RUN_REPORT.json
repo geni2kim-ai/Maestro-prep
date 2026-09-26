@@ -1,25 +1,28 @@
 {
-  "schema": "MAESTRO_PUBLIC_PROFILE_RECEIPT_V1",
-  "profile": "INITIAL_COORDINATOR_PUBLIC_REDACTED",
-  "status": "LOCAL_TESTS_PASSED",
-  "source": "CURRENT_PUBLIC_FILES_ONLY",
-  "public_compat_component_not_original_pin": true,
-  "actual_router": "NOT_RUN",
-  "approved_local_planning": "NOT_RUN",
-  "deployment_authorized": false,
-  "test_results": {
-    "coordinator_tests": {
-      "passed": 30
-    },
-    "public_compatibility_tests": {
-      "passed": 61
-    },
-    "privacy_scanner": "PASS"
+  "schema": "MAESTRO_PUBLIC_CANDIDATE_REPORT_V1",
+  "version": "0.2.9-r2-public-redacted-candidate",
+  "scope": "CURRENT_SANITIZED_PUBLIC_SOURCE_AND_SYNTHETIC_ONLY",
+  "local_validation": {
+    "maestro_unit_tests": 177,
+    "passed": 176,
+    "skipped": 1,
+    "public_compat_component_tests": 61,
+    "generic_archive_regressions": 18,
+    "privacy_scanner_regressions": 5,
+    "privacy_current_source": "PASS"
   },
-  "external_gates": {
-    "approved_vendor_source": "NOT_VERIFIED",
-    "installed_provider": "NOT_RUN",
-    "live_node": "NOT_RUN",
-    "deployment": "NOT_AUTHORIZED"
-  }
+  "functional_changes": [
+    "NONFUNCTIONAL_INTERNAL_NAMES_REMOVED",
+    "HISTORICAL_PRIVATE_EXPORT_SPECIFIC_AUDITOR_REPLACED_WITH_GENERIC_OWNER_PINNED_ARCHIVE_BYTE_CHECK",
+    "OPTIONAL_TRANSPORTED_PACKET_AUDIT_RENAMED_AND_GENERALIZED_IN_PUBLIC_COMPAT_COMPONENT"
+  ],
+  "original_prep_component_byte_pin": "NOT_EQUIVALENT_PUBLIC_DERIVATIVE",
+  "original_private_archive_adapter": "REQUIRES_SEPARATELY_APPROVED_LOCAL_PROFILE",
+  "public_reference_integrity": "HOLD_UPSTREAM_HISTORICAL_MANIFEST_DRIFT",
+  "approved_router_execution": "NOT_RUN",
+  "approved_local_planning": "NOT_RUN",
+  "approved_original_evidence_component": "NOT_RUN",
+  "independent_review": "NOT_RUN",
+  "deployment_authority": false,
+  "historical_github_cleanup": "SEPARATE_FROM_CURRENT_FILE_SANITIZATION"
 }

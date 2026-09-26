@@ -1,1 +1,12 @@
-{"schema": "ASTRA_PREP_CAPTURE_V1", "work_unit": "SYNTHETIC-UNIT-TEST", "node_id": "synthetic", "astra_skill_sha256": "0a16faabb3c8a34afec0f300ac2287a844a31d8ecc90dcfeeac216db04adf82f", "plan_sha256": "3ac95589fec9896c37155eea539f9faaa148d1c47931e5b678c6fe27c8850c66", "plan_file": "plan.json", "status": "READY_FOR_LOCAL_CANDIDATE_WORK", "captured_at_utc": "2026-09-25T00:00:00Z"}
+{
+  "astra_skill_sha256": "0a16faabb3c8a34afec0f300ac2287a844a31d8ecc90dcfeeac216db04adf82f",
+  "captured_at_utc": "2026-09-25T00:00:00Z",
+  "node_id": "synthetic",
+  "origin_route_output_sha256": "34255b0129ef575242570a34eb9bce36df0101a5ac92e8b62167582043588b59",
+  "plan_file": "plan.json",
+  "plan_sha256": "3ac95589fec9896c37155eea539f9faaa148d1c47931e5b678c6fe27c8850c66",
+  "schema": "ASTRA_PREP_CAPTURE_V2",
+  "status": "READY_FOR_LOCAL_CANDIDATE_WORK",
+  "task_sha256": "ccc67a9bfb4c2533d29dfacb86eaa0bd75c4774fa2e69dff513fb9e0016bdf76",
+  "work_unit": "SYNTHETIC-UNIT-TEST"
+}
