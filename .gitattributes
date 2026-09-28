@@ -1,0 +1,2 @@
+# Preserve byte-exact frozen public source on Unix and Windows.
+* -text

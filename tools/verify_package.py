@@ -12,7 +12,7 @@ import json
 import sys
 
 EXCLUDE = {'MANIFEST.json', 'SHA256SUMS.txt'}
-GIT_METADATA = {'.git', '.github', '__pycache__', '.pytest_cache', '.venv'}
+GIT_METADATA = {'.git', '.github', '.gitattributes', '__pycache__', '.pytest_cache', '.venv'}
 CONTROL_DOCS = {
     'feedback/feedback_v0.1.0-public-redacted-hotfix.md',
     'evidence/evidence_v0.1.0-public-redacted-hotfix.md',
