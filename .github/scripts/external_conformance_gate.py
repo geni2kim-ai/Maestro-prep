@@ -36,6 +36,24 @@ COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 class GateError(ValueError):
     pass
 
+def strict_json(path: Path, limit: int = 8 * 1024 * 1024) -> dict:
+    """Read bounded UTF-8 JSON, rejecting duplicate keys and non-finite values."""
+    with path.open("rb") as stream:
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise GateError("JSON_SIZE_LIMIT")
+    def no_duplicates(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise GateError("DUPLICATE_JSON_KEY")
+            result[key] = value
+        return result
+    def no_constant(_value):
+        raise GateError("NONFINITE_JSON_VALUE")
+    return json.loads(data.decode("utf-8"), object_pairs_hook=no_duplicates,
+                      parse_constant=no_constant)
+
 def digest_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as stream:
@@ -55,7 +73,7 @@ def ordinary_private_file(path: Path, root: Path) -> Path:
     return resolved
 
 def check_archive(archive: Path, manifest_file: Path) -> int:
-    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    manifest = strict_json(manifest_file, limit=256 * 1024)
     if not isinstance(manifest, dict) or set(manifest) != {"schema", "files"} or manifest["schema"] != "OWNER_APPROVED_REFERENCE_BUNDLE_V1":
         raise GateError("REFERENCE_BUNDLE_MANIFEST_INVALID")
     files = manifest["files"]
@@ -74,12 +92,15 @@ def check_archive(archive: Path, manifest_file: Path) -> int:
         expected[path] = row
     if sum(x["bytes"] for x in files) > 256 * 1024 * 1024:
         raise GateError("REFERENCE_ARCHIVE_TOO_LARGE")
+    if archive.stat().st_size > 512 * 1024 * 1024:
+        raise GateError("REFERENCE_ARCHIVE_COMPRESSED_LIMIT")
     with zipfile.ZipFile(archive) as zf:
         info = zf.infolist()
         if len(info) != len(expected) or sorted(x.filename for x in info) != sorted(expected):
             raise GateError("REFERENCE_ARCHIVE_MEMBER_MISMATCH")
         for member in info:
-            if (member.is_dir() or stat.S_ISLNK(member.external_attr >> 16)
+            filetype = stat.S_IFMT(member.external_attr >> 16)
+            if (member.is_dir() or filetype not in {0, stat.S_IFREG}
                     or member.file_size != expected[member.filename]["bytes"]
                     or member.flag_bits & 1):
                 raise GateError("REFERENCE_ARCHIVE_UNSAFE")
@@ -99,7 +120,7 @@ def verify_pins(pin_path: Path, source_root: Path, harness: Path, commit: str) -
         raise GateError("REFERENCE_ROOT_MUST_BE_EXTERNAL")
     if pin_path.is_symlink() or not pin_path.is_file() or pin_path.resolve().is_relative_to(CHECKOUT):
         raise GateError("PIN_FILE_MUST_BE_OWNER_CONTROLLED")
-    pin = json.loads(pin_path.read_text(encoding="utf-8"))
+    pin = strict_json(pin_path, limit=128 * 1024)
     if not isinstance(pin, dict) or set(pin) != PIN_KEYS or pin["schema"] != "MAESTRO_EXTERNAL_REFERENCE_PIN_V1":
         raise GateError("PIN_CONTRACT_INVALID")
     if (pin["approval_scope"] != "OFFLINE_REFERENCE_CONFORMANCE_ONLY"
@@ -127,7 +148,7 @@ def verify_pins(pin_path: Path, source_root: Path, harness: Path, commit: str) -
             or digest_file(harness) != pin["trusted_harness_sha256"]):
         raise GateError("HARNESS_NOT_SEPARATELY_PINNED")
     for role in ("profile", "schema", "bundle_manifest"):
-        parsed = json.loads(paths[role].read_text(encoding="utf-8"))
+        parsed = strict_json(paths[role])
         if not isinstance(parsed, dict):
             raise GateError("INVALID_REFERENCE_JSON")
     members = check_archive(paths["reference_archive"], paths["bundle_manifest"])
@@ -165,7 +186,13 @@ def run_owner_harness(pin_path: Path, root: Path, harness: Path, commit: str, ou
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, check=False)
         if call.returncode != 0 or not raw_receipt.is_file() or raw_receipt.is_symlink():
             raise GateError("OWNER_HARNESS_FAILED")
-        result = json.loads(raw_receipt.read_text(encoding="utf-8"))
+        # Exact owner-approved inputs must remain pinned after the separate
+        # harness returns; this is not a claim of immutable host custody.
+        post = verify_pins(pin_path, root, harness, commit)
+        if (post["pin_sha256"] != gate["pin_sha256"]
+                or post["reference_archive_sha256"] != gate["reference_archive_sha256"]):
+            raise GateError("APPROVED_INPUTS_CHANGED_DURING_RUN")
+        result = strict_json(raw_receipt, limit=32 * 1024)
         counts = result.get("cases") if isinstance(result, dict) else None
         if (not isinstance(result, dict)
                 or set(result) != {"schema", "status", "source_commit", "pin_sha256",
@@ -184,7 +211,8 @@ def run_owner_harness(pin_path: Path, root: Path, harness: Path, commit: str, ou
             raise GateError("OWNER_HARNESS_RECEIPT_INVALID")
         gate.update(actual_conformance="OWNER_HARNESS_REPORTED_PASS",
                     positive_cases=counts["positive"], negative_cases=counts["negative"])
-        target.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        with target.open("x", encoding="utf-8", newline="\n") as output_file:
+            output_file.write(json.dumps(gate, indent=2, sort_keys=True) + "\n")
         return gate
     finally:
         raw_receipt.unlink(missing_ok=True)

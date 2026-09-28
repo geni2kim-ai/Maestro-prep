@@ -70,5 +70,81 @@ class ExternalGateTests(unittest.TestCase):
             with self.assertRaisesRegex(GATE.GateError, "HARNESS_NOT"):
                 GATE.verify_pins(pin_file, root, harness, COMMIT)
 
+
+    def test_duplicate_pin_json_key_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, pin, pin_file, harness = fixture(Path(td))
+            raw = pin_file.read_text(encoding="utf-8")
+            pin_file.write_text(raw.replace('{"schema":', '{"schema": "other", "schema":', 1), encoding="utf-8")
+            with self.assertRaisesRegex(GATE.GateError, "DUPLICATE_JSON_KEY"):
+                GATE.verify_pins(pin_file, root, harness, COMMIT)
+
+    def test_duplicate_and_traversal_member_names_are_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, pin, pin_file, harness = fixture(Path(td))
+            archive = root / "reference_archive.zip"
+            with zipfile.ZipFile(archive, "a") as zf:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    zf.writestr("payload.txt", b"synthetic payload")
+            with self.assertRaisesRegex(GATE.GateError, "REFERENCE_ARCHIVE_MEMBER_MISMATCH"):
+                GATE.check_archive(archive, root / "bundle_manifest.json")
+            bad = {"schema": "OWNER_APPROVED_REFERENCE_BUNDLE_V1",
+                   "files": [{"path": "../item", "bytes": 1, "sha256": SHA(b"x")}]}
+            (root / "bundle_manifest.json").write_text(json.dumps(bad), encoding="utf-8")
+            with self.assertRaisesRegex(GATE.GateError, "REFERENCE_ENTRY_UNSAFE"):
+                GATE.check_archive(archive, root / "bundle_manifest.json")
+
+    def test_special_member_type_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, pin, pin_file, harness = fixture(Path(td))
+            archive = root / "reference_archive.zip"
+            info = zipfile.ZipInfo("payload.txt")
+            info.create_system = 3
+            info.external_attr = 0o120777 << 16
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
+                zf.writestr(info, b"synthetic payload")
+            with self.assertRaisesRegex(GATE.GateError, "REFERENCE_ARCHIVE_UNSAFE"):
+                GATE.check_archive(archive, root / "bundle_manifest.json")
+
+    def test_declared_archive_size_limit_is_enforced(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, pin, pin_file, harness = fixture(Path(td))
+            bad = {"schema": "OWNER_APPROVED_REFERENCE_BUNDLE_V1",
+                   "files": [{"path": "payload.txt", "bytes": 33 * 1024 * 1024, "sha256": SHA(b"x")}]}
+            (root / "bundle_manifest.json").write_text(json.dumps(bad), encoding="utf-8")
+            with self.assertRaisesRegex(GATE.GateError, "REFERENCE_ENTRY_UNSAFE"):
+                GATE.check_archive(root / "reference_archive.zip", root / "bundle_manifest.json")
+
+    def test_owner_harness_drift_is_rejected_after_execution(self):
+        # Temporary synthetic test harness; no owner reference or service used.
+        with tempfile.TemporaryDirectory() as td:
+            root, pin, pin_file, harness = fixture(Path(td))
+            harness.write_text(
+                'import json, sys, hashlib\n'
+                'from pathlib import Path\n'
+                'a=sys.argv\n'
+                'ref=Path(a[a.index("--reference-root")+1])\n'
+                'pin=Path(a[a.index("--pin")+1])\n'
+                'out=Path(a[a.index("--receipt-output")+1])\n'
+                'd=json.loads(pin.read_text())\n'
+                'payload={"schema":"MAESTRO_OWNER_HARNESS_RECEIPT_V1","status":"PASS",'
+                '"source_commit":d["maestro_source_commit"],'
+                '"pin_sha256":hashlib.sha256(pin.read_bytes()).hexdigest(),'
+                '"reference_archive_sha256":d["reference_files"]["reference_archive"]["sha256"],'
+                '"cases":{"positive":1,"negative":2,"failed":0,"skipped":0},'
+                '"scope":"OFFLINE_APPROVED_REFERENCE_ONLY","authority":"none"}\n'
+                '(ref/"profile.json").write_text(json.dumps({"changed": True}))\n'
+                'out.write_text(json.dumps(payload))\n',
+                encoding="utf-8",
+            )
+            pin["trusted_harness_sha256"] = GATE.digest_file(harness)
+            pin_file.write_text(json.dumps(pin), encoding="utf-8")
+            receipt = Path(td) / "candidate.json"
+            with self.assertRaisesRegex(GATE.GateError, "REFERENCE_HASH_MISMATCH"):
+                GATE.run_owner_harness(pin_file, root, harness, COMMIT, receipt)
+            self.assertFalse(receipt.exists())
+
 if __name__ == "__main__":
     unittest.main()
