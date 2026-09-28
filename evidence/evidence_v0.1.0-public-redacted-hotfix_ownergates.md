@@ -57,3 +57,15 @@
 | 3 — Independent review | Immutable-input reviewer handoff and owner nomination request prepared | `NOT_ASSIGNED / INDEPENDENT_REVIEW_NOT_RUN` | Owner names a different human/agent, explicitly binds its input snapshot and records its separate acceptance/results. |
 
 **Boundary:** `candidate_only=true`, `finality=non_final`, `decision_authority=none`, `external_conformance=NOT_RUN`, `independent_review=NOT_RUN`, `release_archive_authenticity=NOT_VERIFIED`, `deployment_authorized=false`. Preparing these three gates and publishing this document does **not** complete owner manual runs or constitute their approval. This evidence-only publication creates a new Git commit; its exact-head main CI must be checked separately and must **not** be mistaken for a manually dispatched Owner release or real external conformance receipt.
+
+## Post-publication checkout inventory correction (fully disclosed)
+
+After publishing the evidence-only document in commit `e2fe0421633f92d11f0fc8efed08932fc453f6f3`, the exact-head [main push CI run 36376574207](https://github.com/geni2kim-ai/Maestro-prep/actions/runs/36376574207) **failed in all four matrix jobs**. The manifest verifier's explicitly named non-distributable evidence list had not yet been updated for the new owner-gates report; the directly observed error was `FILE_SET_OR_HASH_MISMATCH`. This also prevented the dependent synthetic ZIP-builder tests from running successfully. This was a report-inventory omission, **not** evidence that a manual Owner release or external conformance run occurred.
+
+The subsequent single correction commit updates only `tools/verify_package.py` to exclude **exactly** `evidence/evidence_v0.1.0-public-redacted-hotfix_ownergates.md`, regenerates the verifier entry in `MANIFEST.json` and its corresponding `SHA256SUMS.txt` line, and updates this report to disclose the intermediate failure. The distributable inventory remains **40 files**, but the verifier itself is a changed distributable file, so the resulting manifest is **a new version of the checkout inventory**, not byte-identical to the historical manifest quoted earlier for the step-2/step-3 snapshots.
+
+- Final candidate verifier raw SHA-256: `fdbed87d2ca02e000623713bd5103982f6a30b01551467f04c418cf90a53c8c9`; bytes: `2867`.
+- Corrected 40-file manifest raw SHA-256: `ef567018fd26d164f81bc4f3a3c660895f073efeb11ed3678e7a65e1015364df`; Git blob `e5104694296f87db17e81dcb79f32f0be53a1cbd`. The old `2035a8ca...` value above belongs to the immutable earlier step snapshots and must **not** be presented as the corrected main manifest.
+- The evidence report and exact correction belong to a later commit; actual exact-head push CI must be checked after publication. Green CI would establish only current-source and synthetic test results, **not** the three missing Owner/independent authorizations.
+
+No substantive Owner-gate outcome changes: release dispatch `NOT_RUN`, actual Astra conformance `NOT_RUN`, independent reviewer `NOT_ASSIGNED / NOT_RUN`.
