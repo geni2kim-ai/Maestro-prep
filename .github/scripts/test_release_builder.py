@@ -44,5 +44,53 @@ class ReleaseBuilderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "OUTPUT_MUST_BE_SEPARATE"):
             MOD.build(ROOT, ROOT / "release-output")
 
+
+    def test_read_only_zip_recheck_accepts_local_bytes_but_not_origin(self):
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td) / "output"
+            created = MOD.build(ROOT, output)
+            archive = output / MOD.ZIP_NAME
+            check = MOD.verify_candidate_archive(ROOT, archive, created["archive_sha256"])
+            self.assertEqual(check["archive_entries"], 42)
+            self.assertEqual(check["local_byte_integrity"], "PASS")
+            self.assertEqual(check["digest_channel_independence"], "NOT_VERIFIED")
+            with self.assertRaisesRegex(ValueError, "OWNER_DIGEST_MISMATCH"):
+                MOD.verify_candidate_archive(ROOT, archive, "a" * 64)
+
+    def test_unexpected_and_duplicate_members_fail_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "original"
+            MOD.build(ROOT, out)
+            base = out / MOD.ZIP_NAME
+            for extra in ("extra.txt", "../outside.txt", "README.md"):
+                archive = Path(td) / ("changed-" + str(len(extra)) + "-" + str(extra.startswith(".")) + ".zip")
+                archive.write_bytes(base.read_bytes())
+                with zipfile.ZipFile(archive, "a") as zf:
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        zf.writestr(extra, b"synthetic")
+                actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+                with self.assertRaisesRegex(ValueError, "ARCHIVE_MEMBER_SET_MISMATCH"):
+                    MOD.verify_candidate_archive(ROOT, archive, actual)
+
+    def test_changed_member_metadata_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "original"
+            MOD.build(ROOT, out)
+            original = out / MOD.ZIP_NAME
+            changed = Path(td) / "changed.zip"
+            with zipfile.ZipFile(original) as src, zipfile.ZipFile(changed, "w") as dest:
+                for original_entry in src.infolist():
+                    item = zipfile.ZipInfo(original_entry.filename, MOD.FIXED_TIME)
+                    item.create_system = 3
+                    item.compress_type = zipfile.ZIP_STORED
+                    item.external_attr = (0o120777 if original_entry.filename == "README.md"
+                                          else 0o100644) << 16
+                    dest.writestr(item, src.read(original_entry))
+            with self.assertRaisesRegex(ValueError, "ARCHIVE_MEMBER_METADATA_INVALID"):
+                MOD.verify_candidate_archive(ROOT, changed,
+                                             hashlib.sha256(changed.read_bytes()).hexdigest())
+
 if __name__ == "__main__":
     unittest.main()

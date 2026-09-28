@@ -68,12 +68,81 @@ def build(root: Path, dest: Path) -> dict:
             "independent_archive_authenticity": "NOT_VERIFIED",
             "deployment_authorized": False}
 
+def verify_candidate_archive(root: Path, archive: Path, expected_sha256: str) -> dict:
+    """Inspect downloaded ZIP without extraction, using a separately supplied digest.
+
+    This tool cannot establish whether the supplied digest arrived through an
+    independent channel; the owner must retain evidence of that comparison.
+    """
+    import re
+    import stat
+    if not isinstance(expected_sha256, str) or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
+        raise ValueError("OWNER_DIGEST_REQUIRED")
+    root = root.resolve(strict=True)
+    archive = archive.resolve(strict=True)
+    if not archive.is_file() or not archive.name.endswith(".zip"):
+        raise ValueError("CANDIDATE_ZIP_REQUIRED")
+    if verify(root)["files"] != 40:
+        raise ValueError("EXPECTED_40_FILES")
+    manifest = json.loads((root / "MANIFEST.json").read_text(encoding="utf-8"))
+    expected = {f["path"]: f for f in manifest["files"]}
+    expected_bytes = sum(f["bytes"] for f in manifest["files"])
+    meta = ("MANIFEST.json", "SHA256SUMS.txt")
+    expected_bytes += sum((root / name).stat().st_size for name in meta)
+    names = sorted([*expected, *meta])
+    if len(names) != 42 or len(set(names)) != 42:
+        raise ValueError("ARCHIVE_MEMBER_COUNT_INVALID")
+    if archive.stat().st_size > expected_bytes + 1024 * 1024:
+        raise ValueError("CANDIDATE_ZIP_SIZE_LIMIT")
+    archive_hash = digest(archive.read_bytes())
+    if archive_hash != expected_sha256:
+        raise ValueError("OWNER_DIGEST_MISMATCH")
+    with zipfile.ZipFile(archive, mode="r") as zf:
+        info = zf.infolist()
+        if len(info) != 42 or [i.filename for i in info] != names:
+            raise ValueError("ARCHIVE_MEMBER_SET_MISMATCH")
+        for entry in info:
+            if (entry.is_dir() or entry.flag_bits & 1 or entry.compress_type != zipfile.ZIP_STORED
+                    or entry.date_time != FIXED_TIME or entry.create_system != 3
+                    or entry.external_attr != 0o100644 << 16
+                    or stat.S_IFMT(entry.external_attr >> 16) != stat.S_IFREG):
+                raise ValueError("ARCHIVE_MEMBER_METADATA_INVALID")
+            original = (root / entry.filename).read_bytes()
+            if entry.file_size != len(original) or zf.read(entry) != original:
+                raise ValueError("ARCHIVE_MEMBER_BYTES_MISMATCH")
+            if entry.filename in expected:
+                pinned = expected[entry.filename]
+                if len(original) != pinned["bytes"] or digest(original) != pinned["sha256"]:
+                    raise ValueError("ARCHIVE_CHECKOUT_PIN_MISMATCH")
+    return {
+        "schema": "MAESTRO_CANDIDATE_ZIP_LOCAL_VERIFICATION_V1",
+        "source": "CURRENT_CHECKOUT_AND_SUPPLIED_DIGEST",
+        "archive_sha256": archive_hash,
+        "payload_files": 40,
+        "archive_entries": 42,
+        "local_byte_integrity": "PASS",
+        "digest_channel_independence": "NOT_VERIFIED",
+        "independent_archive_authenticity": "NOT_VERIFIED_BY_THIS_TOOL",
+        "deployment_authorized": False,
+    }
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    choice = parser.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--output-dir", type=Path)
+    choice.add_argument("--verify-archive", type=Path)
+    parser.add_argument("--expected-sha256", help="Digest separately supplied by owner; origin is not attested here")
     args = parser.parse_args()
     try:
-        print(json.dumps(build(ROOT, args.output_dir), sort_keys=True, indent=2))
+        if args.verify_archive is not None:
+            if not args.expected_sha256:
+                raise ValueError("OWNER_DIGEST_REQUIRED")
+            result = verify_candidate_archive(ROOT, args.verify_archive, args.expected_sha256)
+        else:
+            if args.expected_sha256 is not None:
+                raise ValueError("DIGEST_ONLY_FOR_VERIFICATION")
+            result = build(ROOT, args.output_dir)
+        print(json.dumps(result, sort_keys=True, indent=2))
         return 0
     except (ValueError, KeyError, OSError, zipfile.BadZipFile) as exc:
         print(json.dumps({"status": "FAIL", "error_type": type(exc).__name__}))

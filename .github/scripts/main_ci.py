@@ -62,7 +62,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         count = int(m.group(1)) if m else 0
         skips = re.search(r'OK \(skipped=(\d+)\)', proc.stderr)
         details.update(tests=count, skipped=int(skips.group(1)) if skips else 0)
-        minimum = 30 if kind == 'coordinator' else (3 if kind in {'release_tests', 'ci_guard_tests'} else (9 if kind == 'external_gate_tests' else 61))
+        minimum = 30 if kind == 'coordinator' else (6 if kind == 'release_tests' else (3 if kind == 'ci_guard_tests' else (9 if kind == 'external_gate_tests' else 61)))
         allowed_skips = (5 + (1 if os.name == 'nt' else 0)) if kind == 'component' else 0
         passed = passed and details['skipped'] == allowed_skips
         passed = passed and count >= minimum and re.search(r'(?m)^OK(?: \(skipped=\d+\))?$', proc.stderr) is not None

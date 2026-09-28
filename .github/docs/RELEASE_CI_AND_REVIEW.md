@@ -51,3 +51,7 @@ This repository may receive an owner-commissioned ChatGPT review of the current 
 ### Source-only boundary-condition follow-up for the reference gate
 
 The local pin gate now rejects ambiguous repeated JSON keys and non-finite values, imposes explicit JSON/archive size limits, checks archive member file types and rechecks owner-pinned source, pin and harness bytes after the separately authorized harness returns. The output receipt uses exclusive creation. Nine repository-local synthetic checks exercise these boundaries; they are not evidence that an owner-supplied external reference, authorized runner or separately approved harness was actually used. Actual external conformance remains NOT_RUN until those prerequisites exist.
+
+### Repository-local ZIP inspection during robustness review
+
+The release builder now offers read-only `--verify-archive PATH --expected-sha256 DIGEST`: it compares a received candidate ZIP's full digest against a **separately supplied input digest** and checks all 42 members, exact names, raw bytes, fixed metadata, file types and frozen public manifest using the current checkout. Six synthetic builder/reader tests include unexpected, duplicate, path-boundary and special-file metadata cases. The program cannot verify the *origin* of the supplied digest and never equates local byte integrity with an independently controlled channel. It extracts no ZIP member and grants no deployment authority.
