@@ -9,7 +9,7 @@
   "deployment_authorized": false,
   "test_results": {
     "coordinator_tests": {
-      "passed": 30
+      "passed": 41
     },
     "public_compatibility_tests": {
       "passed": 61

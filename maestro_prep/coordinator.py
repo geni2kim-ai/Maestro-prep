@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import json
 import re
+import stat
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import Any
 BASE = Path(__file__).resolve().parents[1]
 VENDOR = BASE / 'components' / 'o_prep_v0_3' / 'src'
 SHA256 = re.compile(r'^[a-f0-9]{64}$')
+_REPARSE_POINT = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
 
 class ContractError(ValueError):
     """Non-sensitive failure code; never include node-local paths or data."""
@@ -41,8 +43,23 @@ def _json_bytes(data: bytes, code: str) -> dict:
     return obj
 
 
+def _is_link(path: Path) -> bool:
+    """Symlink, NTFS junction or other reparse point; `is_symlink()` misses junctions."""
+    try: st = path.lstat()
+    except OSError: return False
+    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, 'st_file_attributes', 0) & _REPARSE_POINT)
+
+
+def _link_free_ancestry(path: Path) -> bool:
+    current = path.absolute()
+    while True:
+        if _is_link(current): return False
+        if current == current.parent: return True
+        current = current.parent
+
+
 def read_json(path: Path, cap: int = 131072) -> dict:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > cap:
+    if _is_link(path) or not path.is_file() or path.stat().st_size > cap:
         raise ContractError('JSON_SOURCE_MISSING_OR_INVALID')
     return _json_bytes(path.read_bytes(), 'INVALID_JSON_SOURCE')
 
@@ -103,7 +120,7 @@ def _relative_file(root: Path, rel: str, limit: int = 1024*1024) -> bytes:
     node = root
     for part in parts:
         node = node / part
-        if node.is_symlink(): raise ContractError('EVIDENCE_SYMLINK_FORBIDDEN')
+        if _is_link(node): raise ContractError('EVIDENCE_SYMLINK_FORBIDDEN')
     if not node.is_file() or not node.resolve().is_relative_to(root.resolve()):
         raise ContractError('EVIDENCE_FILE_MISSING')
     if node.stat().st_size > limit: raise ContractError('EVIDENCE_SIZE_LIMIT')
@@ -118,7 +135,7 @@ def vendor_module():
     for name in ('src/o_prep.py', 'src/evidence_bindings.py'):
         if name not in manifest.get('files', {}): raise ContractError('O_MODULE_PIN_INCOMPLETE')
         fp = BASE / 'components' / 'o_prep_v0_3' / name
-        if not fp.is_file() or fp.is_symlink() or _hash(fp.read_bytes()) != manifest['files'][name]:
+        if not fp.is_file() or _is_link(fp) or _hash(fp.read_bytes()) != manifest['files'][name]:
             raise ContractError('O_MODULE_HASH_MISMATCH')
     if str(VENDOR) not in sys.path: sys.path.insert(0,str(VENDOR))
     module = importlib.import_module('o_prep')
@@ -133,7 +150,7 @@ def _astra_binding(work: dict, lock: dict, root: Path, skill_path: Path | None, 
     if skill_path is None: return ['HOLD_PLAN_MODULE_MISSING']
     try:
         # Astra remains an exact, separately approved local installation.
-        if skill_path.is_symlink() or not skill_path.is_file() or _hash(skill_path.read_bytes()) != lock['astra']['skill_sha256']:
+        if _is_link(skill_path) or not skill_path.is_file() or _hash(skill_path.read_bytes()) != lock['astra']['skill_sha256']:
             return ['HOLD_ASTRA_SOURCE_PIN']
     except OSError:
         return ['HOLD_ASTRA_SOURCE_PIN']
@@ -184,7 +201,8 @@ def decide(work: dict, lock: dict, o_signal: dict, index_path: Path, evidence_ro
            leonardo_route_rel: str | None = None) -> dict:
     """Mandatory O-Prep bound gate; never executes Astra, Leonardo or host mutations."""
     check_work(work); check_lock(lock)
-    if evidence_root.is_symlink() or not evidence_root.is_dir():raise ContractError('EVIDENCE_ROOT_INVALID')
+    # The root and every ancestor must be link-free, including junctions the pinned O-Prep check misses.
+    if not evidence_root.is_dir() or not _link_free_ancestry(evidence_root):raise ContractError('EVIDENCE_ROOT_INVALID')
     if (work['work_unit'],work['node_id'],work['stage'],_timezone(work['captured_at_utc'])) != (
             o_signal.get('work_unit'),o_signal.get('node_id'),o_signal.get('stage'),_timezone(o_signal.get('captured_at_utc'))):
         raise ContractError('O_SIGNAL_WORK_BINDING_MISMATCH')
@@ -232,7 +250,7 @@ def _result(work: dict, o_decision: dict | None, issues: list[str], o_invoked: b
 
 def verify_generic_file(path: Path, expected_sha: str) -> dict:
     _sha(expected_sha,'EXPECTED_HASH_INVALID')
-    if not path.is_file() or path.is_symlink() or path.stat().st_size > 25*1024*1024:
+    if not path.is_file() or _is_link(path) or path.stat().st_size > 25*1024*1024:
         raise ContractError('AUDIT_FILE_INVALID')
     observed = _hash(path.read_bytes())
     return {'schema':'MAESTRO_READ_ONLY_AUDIT_V1','sha256_matches':observed==expected_sha,

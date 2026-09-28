@@ -2,11 +2,14 @@
 import copy
 import hashlib
 import json
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from maestro_prep import coordinator
 from maestro_prep.coordinator import (
     ContractError, check_work, check_lock, decide, read_json, vendor_module,verify_generic_file,
 )
@@ -147,6 +150,43 @@ class CoordinatorTests(Fixture):
         x=self.invoke(astra_skill_path=None,leonardo_route_rel=None)
         self.assertIn('HOLD_PLAN_MODULE_MISSING',x['issue_codes'])
         self.assertIn('HOLD_LEONARDO_ROUTE_CAPTURE_MISSING',x['issue_codes'])
+
+class JunctionGuardTests(Fixture):
+    """NTFS junctions are reparse points that Path.is_symlink() does not report."""
+    def flag(self,*paths):
+        marked={p.absolute() for p in paths}
+        return patch.object(coordinator,'_is_link',side_effect=lambda p:p.absolute() in marked)
+    def test_reparse_point_attribute_is_treated_as_link(self):
+        fake=SimpleNamespace(st_mode=stat.S_IFDIR,st_file_attributes=0x400)
+        with patch.object(Path,'lstat',return_value=fake):
+            self.assertTrue(coordinator._is_link(self.root))
+        self.assertFalse(coordinator._is_link(self.root))
+    def test_junction_evidence_root_is_rejected(self):
+        with self.flag(self.root),self.assertRaises(ContractError) as ctx:self.invoke()
+        self.assertEqual(str(ctx.exception),'EVIDENCE_ROOT_INVALID')
+    def test_junction_evidence_root_ancestor_is_rejected(self):
+        with self.flag(self.tmp),self.assertRaises(ContractError) as ctx:self.invoke()
+        self.assertEqual(str(ctx.exception),'EVIDENCE_ROOT_INVALID')
+    def test_symlinked_evidence_root_ancestor_is_rejected(self):
+        link=self.tmp.parent/(self.tmp.name+'_alias')
+        try:link.symlink_to(self.tmp,target_is_directory=True)
+        except OSError:self.skipTest('Symlinks restricted')
+        self.addCleanup(link.unlink)
+        with self.assertRaises(ContractError) as ctx:
+            decide(copy.deepcopy(self.work),copy.deepcopy(self.lock),copy.deepcopy(self.signal),
+                   link/'private'/'receipt_index.json',link/'private',astra_skill_path=self.astra,
+                   astra_plan_receipt_rel=self.plan_rel,leonardo_route_rel=self.route_rel)
+        self.assertEqual(str(ctx.exception),'EVIDENCE_ROOT_INVALID')
+    def test_junction_inside_evidence_root_is_rejected(self):
+        with self.flag(self.root/self.route_rel):x=self.invoke()
+        self.assertEqual(x['next_action'],'HOLD_INTEGRATION')
+        self.assertIn('EVIDENCE_SYMLINK_FORBIDDEN',x['issue_codes'])
+    def test_junction_astra_skill_is_rejected(self):
+        with self.flag(self.astra):x=self.invoke()
+        self.assertIn('HOLD_ASTRA_SOURCE_PIN',x['issue_codes'])
+    def test_junction_audit_file_is_rejected(self):
+        path=self.tmp/'artifact';path.write_bytes(b'private synthetic file')
+        with self.flag(path),self.assertRaises(ContractError):verify_generic_file(path,HASH(path.read_bytes()))
 
 class ReplayTests(unittest.TestCase):
     def test_prior_twenty_synthetic_cases_match_current_pinned_o(self):
