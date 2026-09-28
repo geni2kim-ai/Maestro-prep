@@ -20,7 +20,7 @@ CONTROL_DOCS = {
 
 def scan(root: Path) -> list[dict]:
     out = []
-    for p in sorted(root.rglob('*')):
+    for p in sorted(root.rglob('*'), key=lambda path: path.relative_to(root).as_posix()):
         relative = p.relative_to(root).as_posix()
         parts = p.relative_to(root).parts
         if any(part in GIT_METADATA for part in parts) or p.suffix == '.pyc':
