@@ -200,8 +200,8 @@
     },
     {
       "path": "tools/verify_package.py",
-      "bytes": 2597,
-      "sha256": "b285aa15afe1126e7d50c4e8aef23f4397e58dbe96c6eadb6a56249502556269"
+      "bytes": 2731,
+      "sha256": "a217db83ad966cd3e8a2d5106d30a6336a11e596ca9bb6ac93682447b50212f0"
     }
   ],
   "evidence_boundary": "SYNTHETIC_ONLY_PUBLIC_DERIVATIVE_NOT_ORIGINAL_VENDOR_APPROVAL"

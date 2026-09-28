@@ -16,6 +16,8 @@ GIT_METADATA = {'.git', '.github', '.gitattributes', '__pycache__', '.pytest_cac
 CONTROL_DOCS = {
     'feedback/feedback_v0.1.0-public-redacted-hotfix.md',
     'evidence/evidence_v0.1.0-public-redacted-hotfix.md',
+    'feedback/feedback_v0.1.0-public-redacted-hotfix_followup.md',
+    'evidence/evidence_v0.1.0-public-redacted-hotfix_followup.md',
 }
 
 def scan(root: Path) -> list[dict]:

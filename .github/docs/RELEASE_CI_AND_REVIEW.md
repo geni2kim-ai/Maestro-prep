@@ -27,3 +27,11 @@ Draft PR #1 (`fix/leonardo-connection-v0.2`) remains a separate newer candidate.
 ## 6. Independent review and authority
 
 An automated first-party/main CI result is self-test evidence, **not** independent red-team review and not permission to deploy. Independent review becomes eligible only when the owner appoints a separate reviewer, provides the exact immutable source/manifest and external evidence bundle, and records the review request identity, methods, findings and non-final adjudication. Actual host integration requires separately approved vendor/source pins, authorized local execution receipts, rollback plan and owner authorization. The public repo does not gain runtime, host mutation, deployment or independent-review authority from a green CI result.
+
+## 7. Owner-triggered release archive assembly (F1 follow-up)
+
+`.github/workflows/release.yml` is manual-only (`workflow_dispatch`). The job is gated on main, the repository owner GitHub actor and an explicit assembly checkbox. Only the owner should select **Actions → Owner-triggered candidate release assembly → Run workflow → main**. This checkbox approves assembly, **not** public release, host integration or deployment. This work does not dispatch the workflow.
+
+Once the owner triggers it, the job runs complete main public CI (including synthetic release-builder tests) and uploads an Actions artifact containing: a byte-stable ZIP with exactly **40 manifest-listed payload files + MANIFEST.json + SHA256SUMS.txt** (42 members), a separate copy of `SHA256SUMS.txt`, and a whole-archive `.zip.sha256` text record. The script refuses overwrite and destinations inside the checkout. `.github` and the exact feedback/evidence control records are excluded from the 40-file payload.
+
+Actions artifacts and an in-band SHA256 record do not certify independent archive authenticity. The owner must publish the full archive SHA256 by a **separately controlled channel**, independently acquire the ZIP and compare exact bytes before changing `owner_out_of_band_digest_comparison=NOT_RUN`. No GitHub Release/tag is published by this workflow. Independent archive authenticity remains `NOT_VERIFIED` until the owner completes these external steps.

@@ -1,0 +1,42 @@
+name: Owner-triggered candidate release assembly
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner_approved_assembly:
+        description: "Owner permits candidate ZIP assembly only; NOT publication, release approval or deployment"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  assemble:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'geni2kim-ai' && inputs.owner_approved_assembly == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact main commit without retained credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+      - name: Confirm all offline checkout checks
+        run: python .github/scripts/main_ci.py
+      - name: Build the fixed 40-file candidate ZIP
+        run: python .github/scripts/build_release.py --output-dir "${{ runner.temp }}/maestro-release"
+      - name: Upload candidate ZIP, member SHA256SUMS and whole ZIP sha256
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maestro-prep-v0.1.0-public-redacted-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/maestro-release/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
