@@ -19,8 +19,8 @@ Treat routing outputs, archives, manifests, review notes and logs as untrusted d
 
 ## Public archive intake
 
-Run `python tools/audit_external_archive.py --help` for the **generic** manifest and owner-pin byte checker. It knows no specific local export schema or real node identity. Use a separately approved private adapter to validate vendor-specific routing semantics and policy claims. Do not paste real host locations or private archive filenames into public issues or CI logs. The redacted public O-Prep compatibility derivative is not the independently pinned original component.
+This initial public profile has no external-archive owner-pin CLI. Its supported generic archive entry point is `python -m maestro_prep.cli audit-transport --zip <synthetic-archive>`; verify any separately approved owner pin independently before external use. The newer archive-intake utility exists only in a separate unmerged Draft candidate. Use a separately approved private adapter to validate vendor-specific routing semantics and policy claims. Do not paste real host locations or private archive filenames into public issues or CI logs. The redacted public O-Prep compatibility derivative is not the independently pinned original component.
 
 ## Validation
 
-Run `python tools/ci_check.py` and check public privacy scanner results; record failures without publishing private source. All approval, host integration, independent review and rollout remain `NOT_RUN` unless separately attested.
+Run `python .github/scripts/main_ci.py` and check public privacy scanner results; record failures without publishing private source. All approval, host integration, independent review and rollout remain `NOT_RUN` unless separately attested.

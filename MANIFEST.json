@@ -5,13 +5,13 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 1205,
-      "sha256": "7470b01e2d53652c35a4c0facc4a8e5003be2ce6228fea74fbf2d3658720f735"
+      "bytes": 2392,
+      "sha256": "e33436dd3c118885290b4f70720222a48875b124bb5ad844933d19d5b19d6ca7"
     },
     {
       "path": "README_KO.md",
-      "bytes": 845,
-      "sha256": "cdbdda22b36556edb053ac92ce7c443fdeb417222094c7b49dc85508bf59e005"
+      "bytes": 1584,
+      "sha256": "5065a18d409207a8de2ce7c42c89ff6b9859eb8f6782a78d0c482d10f9624391"
     },
     {
       "path": "RUN_REPORT.json",
@@ -20,8 +20,8 @@
     },
     {
       "path": "SKILL.md",
-      "bytes": 2082,
-      "sha256": "c4b2c685158799d515019c8fa17312120188a11c9032d303fa2ebf516b030d4c"
+      "bytes": 2263,
+      "sha256": "01873979d212fd2c67dc27ba328fe5a8d922a39d6137aec2f149103a7742234d"
     },
     {
       "path": "adapters/ASTRA_INTEGRATION_CONTRACT.md",
@@ -200,8 +200,8 @@
     },
     {
       "path": "tools/verify_package.py",
-      "bytes": 2004,
-      "sha256": "6ec5d41ddd83dd86cc101ca1a90a6598b69882c336cfb9d5262db95242c5b0ae"
+      "bytes": 2527,
+      "sha256": "e3c8c5d7ed06ae8dd0a6e4061e96bc0ef1ac373eb918ed50c063635c8936f5bb"
     }
   ],
   "evidence_boundary": "SYNTHETIC_ONLY_PUBLIC_DERIVATIVE_NOT_ORIGINAL_VENDOR_APPROVAL"
