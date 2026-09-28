@@ -10,7 +10,7 @@ The manifest scanner explicitly sorts by POSIX path strings (not platform-specif
 
 ## 2. Badges and run provenance
 
-At inspection, the actual `main` README had **no** CI or release badge, contrary to the historical feedback description. Do not display a Draft PR badge as a main result. Main remains badge-free until an exact main run ID, commit SHA and matrix conclusions are verified. An added workflow file is not itself a passing CI receipt; consult the main-specific Actions URL for the run.
+At inspection, the actual `main` README had **no** CI or release badge, contrary to the historical feedback description. Do not display a Draft PR badge as a main result. Main deliberately remains badge-free. Confirm an exact current-head commit SHA and every corresponding platform conclusion in Actions; an older green run does not validate newer code.
 
 ## 3. External planning reference conformance
 
