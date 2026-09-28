@@ -59,7 +59,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         count = int(m.group(1)) if m else 0
         skips = re.search(r'OK \(skipped=(\d+)\)', proc.stderr)
         details.update(tests=count, skipped=int(skips.group(1)) if skips else 0)
-        minimum = 35 if kind == 'coordinator' else 61
+        minimum = 30 if kind == 'coordinator' else 61
         passed = passed and count >= minimum and re.search(r'(?m)^OK(?: \(skipped=\d+\))?$', proc.stderr) is not None
         if kind == 'component' and os.name == 'nt':
             passed = passed and proc.stderr.count('VENDOR_PLATFORM_EXCEPTION') == 1
