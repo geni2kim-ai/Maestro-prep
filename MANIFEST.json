@@ -5,13 +5,13 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 2392,
-      "sha256": "e33436dd3c118885290b4f70720222a48875b124bb5ad844933d19d5b19d6ca7"
+      "bytes": 2477,
+      "sha256": "ff33bb97bff649428256927d12ab4ec6061e8ee5a65954ad8d5882c0f364c446"
     },
     {
       "path": "README_KO.md",
-      "bytes": 1584,
-      "sha256": "5065a18d409207a8de2ce7c42c89ff6b9859eb8f6782a78d0c482d10f9624391"
+      "bytes": 1675,
+      "sha256": "5d557dd7b1f27b9b7fa371a7f62f03d2eb3a4eabf32035d27939ae1b1a2b042c"
     },
     {
       "path": "RUN_REPORT.json",
