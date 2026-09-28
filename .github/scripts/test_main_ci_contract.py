@@ -24,8 +24,11 @@ class CIAccountingTests(unittest.TestCase):
     def test_dropped_coordinator_regression_is_rejected(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 40 tests\nOK\n")
         self.assertFalse(item["passed"])
+    def test_dropped_public_component_regression_is_rejected(self):
+        item = self.simulate("public_component_tests", "component", "Ran 69 tests\nOK (skipped=5)\n")
+        self.assertFalse(item["passed"])
     def test_unexplained_public_component_skip_is_rejected(self):
-        item = self.simulate("public_component_tests", "component", "Ran 61 tests\nOK (skipped=0)\n")
+        item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK (skipped=0)\n")
         self.assertFalse(item["passed"])
 
 if __name__ == "__main__":
