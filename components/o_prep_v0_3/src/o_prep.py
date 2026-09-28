@@ -17,7 +17,7 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 from typing import Any
-from evidence_bindings import verify_local_bindings, BindingError
+from evidence_bindings import verify_local_bindings, BindingError, is_link
 
 VERSION = "0.3.0-prep"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -443,14 +443,14 @@ def evaluate_bound_signal(signal: dict, receipt_index_path: str, evidence_root: 
 def _secure_out_file(target: Path, output_root: Path, text: str) -> None:
     """Create a new 0600 file only inside a pre-existing isolated output root.
 
-    Never follow a path-component symlink or overwrite a prior receipt.
+    Never follow a path-component symlink/junction or overwrite a prior receipt.
     """
     root = output_root.absolute()
     if not root.is_dir():
         raise OPrepError("output_root_not_existing_directory")
     current = root
     while current != current.parent:
-        if current.is_symlink():
+        if is_link(current):
             raise OPrepError("symlink_output_root_forbidden")
         current = current.parent
     try:
@@ -464,11 +464,11 @@ def _secure_out_file(target: Path, output_root: Path, text: str) -> None:
         if component in {".", ".."}:
             raise OPrepError("output_path_component_invalid")
         p = p / component
-        if not p.is_dir() or p.is_symlink():
+        if not p.is_dir() or is_link(p):
             raise OPrepError("output_parent_not_private_directory")
     p = p / relative.name
     _check_out_path(p)
-    if p.is_symlink():
+    if is_link(p):
         raise OPrepError("output_symlink_forbidden")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
@@ -486,7 +486,7 @@ def _check_out_path(path: Path) -> None:
     parts = [p.lower() for p in path.resolve().parts]
     if "skills" in parts and "active_shared" in parts:
         raise OPrepError("shared_skill_tree_is_not_an_output_root")
-    if path.exists() and path.is_symlink():
+    if is_link(path):
         raise OPrepError("symlink_output_not_allowed")
 
 

@@ -36,7 +36,7 @@
     {
       "path": "components/o_prep_v0_3/SOURCE_PIN.json",
       "bytes": 328,
-      "sha256": "ae2e51c9828f05d34f13525ebf017ef388d6ead9ca3e0db2fc913935ca255842"
+      "sha256": "95a79fb5615a34932bdb1111a1facaa83e32c1dad85706c923b5713fa99ccac1"
     },
     {
       "path": "components/o_prep_v0_3/schemas/decision.schema.json",
@@ -60,8 +60,8 @@
     },
     {
       "path": "components/o_prep_v0_3/src/o_prep.py",
-      "bytes": 28334,
-      "sha256": "716c9a2c75de879e6d907079bbf56580e857ee3e567d7b323febdcea46dc788d"
+      "bytes": 28318,
+      "sha256": "3237d0a409623187ef659ef795f21e5198b23114b69c98149caaadbaae6dffee"
     },
     {
       "path": "components/o_prep_v0_3/tests/test_o_prep.py",
@@ -75,8 +75,8 @@
     },
     {
       "path": "components/o_prep_v0_3/tests/test_v03_hardening.py",
-      "bytes": 15833,
-      "sha256": "cc39370c231bddc25f90a06b1cda1f049abeff390e0a8f726c807a4e6358057d"
+      "bytes": 16943,
+      "sha256": "33c679c2cd25c38420cc5703679000d5aeb29f48fa1106b517ce7d2b5fd83c53"
     },
     {
       "path": "evidence/prior_simulation_baseline.json",

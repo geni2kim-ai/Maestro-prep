@@ -267,6 +267,27 @@ class V03OutputTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
 
+class V03JunctionOutputTests(unittest.TestCase):
+    def setUp(self):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        self.tmp=Path(temp.name);self.root=self.tmp/'private';self.root.mkdir()
+
+    def test_junction_output_root_ancestor_is_blocked(self):
+        with reparse_points(self.tmp),self.assertRaisesRegex(OPrepError,'symlink_output_root_forbidden'):
+            _secure_out_file(self.root/'receipt.json',self.root,'{}')
+        self.assertFalse((self.root/'receipt.json').exists())
+
+    def test_junction_output_parent_is_blocked(self):
+        (self.root/'sub').mkdir()
+        with reparse_points(self.root/'sub'),self.assertRaisesRegex(OPrepError,'output_parent_not_private_directory'):
+            _secure_out_file(self.root/'sub'/'receipt.json',self.root,'{}')
+        self.assertFalse((self.root/'sub'/'receipt.json').exists())
+
+    def test_unmarked_output_root_still_writes(self):
+        with reparse_points(self.tmp/'unrelated'):_secure_out_file(self.root/'receipt.json',self.root,'{}')
+        self.assertEqual((self.root/'receipt.json').read_text(),'{}')
+
+
 class V03ArchiveTests(unittest.TestCase):
     def test_manifest_duplicate_json_field_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
