@@ -1,0 +1,33 @@
+{
+  "schema": "MAESTRO_EXTERNAL_REFERENCE_PIN_V1",
+  "owner_approval_id": "OWNER_APPROVAL_REQUIRED",
+  "approval_scope": "OFFLINE_REFERENCE_CONFORMANCE_ONLY",
+  "maestro_source_commit": "REPLACE_WITH_EXACT_40_LOWERCASE_HEX_MAIN_COMMIT",
+  "reference_files": {
+    "reference_archive": {
+      "path": "reference_archive.zip",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+    },
+    "profile": {
+      "path": "profile.json",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+    },
+    "schema": {
+      "path": "schema.json",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+    },
+    "validator": {
+      "path": "validator.py",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+    },
+    "skill_contract": {
+      "path": "SKILL.md",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+    },
+    "bundle_manifest": {
+      "path": "bundle_manifest.json",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+    }
+  },
+  "trusted_harness_sha256": "REPLACE_WITH_64_LOWERCASE_SHA256"
+}

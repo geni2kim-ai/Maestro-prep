@@ -1,0 +1,50 @@
+name: DRAFT owner-gated external reference conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner_approved_external_run:
+        description: "Owner has independently approved pins, isolated runner and trusted harness (NOT a review/deploy approval)"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  conformance-draft:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'geni2kim-ai' && inputs.owner_approved_external_run == true }}
+    runs-on: [self-hosted, maestro-owner-approved, isolated]
+    timeout-minutes: 15
+    env:
+      MAESTRO_APPROVED_REFERENCE_ROOT: ${{ vars.MAESTRO_APPROVED_REFERENCE_ROOT }}
+      MAESTRO_OWNER_PIN_FILE: ${{ vars.MAESTRO_OWNER_PIN_FILE }}
+      MAESTRO_TRUSTED_HARNESS: ${{ vars.MAESTRO_TRUSTED_HARNESS }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact main source (do not retain credentials)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Check exact owner pins and run separately approved offline harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MAESTRO_APPROVED_REFERENCE_ROOT"
+          test -n "$MAESTRO_OWNER_PIN_FILE"
+          test -n "$MAESTRO_TRUSTED_HARNESS"
+          python .github/scripts/external_conformance_gate.py \
+            --pin "$MAESTRO_OWNER_PIN_FILE" \
+            --reference-root "$MAESTRO_APPROVED_REFERENCE_ROOT" \
+            --harness "$MAESTRO_TRUSTED_HARNESS" \
+            --expected-commit "$GITHUB_SHA" \
+            --mode owner-run \
+            --receipt-output "${{ runner.temp }}/maestro-owner-reference-receipt.json"
+      - name: Upload candidate-only non-secret validation receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: owner-reference-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/maestro-owner-reference-receipt.json
+          if-no-files-found: error
+          retention-days: 14

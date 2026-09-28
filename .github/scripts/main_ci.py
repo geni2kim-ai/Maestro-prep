@@ -17,6 +17,7 @@ CASES = (
     ('public_component_tests', ['.github/scripts/run_public_component_tests.py'], 'component'),
     ('synthetic_replay', ['tools/replay_simulation.py'], 'replay'),
     ('release_builder_tests', ['-m', 'unittest', 'discover', '-s', '.github/scripts', '-p', 'test_release_builder.py', '-q'], 'release_tests'),
+    ('external_gate_synthetic_tests', ['-m', 'unittest', 'discover', '-s', '.github/scripts', '-p', 'test_external_conformance_gate.py', '-q'], 'external_gate_tests'),
 )
 
 def run_case(name: str, args: list[str], kind: str) -> dict:
@@ -60,7 +61,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         count = int(m.group(1)) if m else 0
         skips = re.search(r'OK \(skipped=(\d+)\)', proc.stderr)
         details.update(tests=count, skipped=int(skips.group(1)) if skips else 0)
-        minimum = 30 if kind == 'coordinator' else (3 if kind == 'release_tests' else 61)
+        minimum = 30 if kind == 'coordinator' else (3 if kind == 'release_tests' else (4 if kind == 'external_gate_tests' else 61))
         passed = passed and count >= minimum and re.search(r'(?m)^OK(?: \(skipped=\d+\))?$', proc.stderr) is not None
         if kind == 'component' and os.name == 'nt':
             passed = passed and proc.stderr.count('VENDOR_PLATFORM_EXCEPTION') == 1
