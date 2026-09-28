@@ -3,7 +3,7 @@
   "version": "0.3.0-prep",
   "files": {
     "src/o_prep.py": "716c9a2c75de879e6d907079bbf56580e857ee3e567d7b323febdcea46dc788d",
-    "src/evidence_bindings.py": "6aa7d17728e5e8b68d64c421fb0f1297ae345ae8bfadf2f58fea97ae12e8b543"
+    "src/evidence_bindings.py": "59294c9597922187dd5e3c8f38298058c3ff143ce066d50be8ab97d7552bb5b5"
   },
   "public_profile": "REDACTED_PUBLIC_DERIVATIVE_NOT_ORIGINAL_PIN"
 }

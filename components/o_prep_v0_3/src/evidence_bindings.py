@@ -22,10 +22,24 @@ ALLOWED_ROLES = frozenset({
 MAX_INDEX_BYTES = 128 * 1024
 MAX_ARTIFACT_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 8 * 1024 * 1024
+_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 class BindingError(ValueError):
     """Safe-to-display, non-path-bearing error code."""
+
+
+def _link_stat(st: os.stat_result) -> bool:
+    # NTFS junctions are reparse points that S_ISLNK/Path.is_symlink() do not report.
+    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & _REPARSE_POINT)
+
+
+def is_link(path: Path) -> bool:
+    """Symlink, NTFS junction or other reparse point; never follow it."""
+    try:
+        return _link_stat(path.lstat())
+    except OSError:
+        return False
 
 
 def _unique_pairs(pairs):
@@ -75,10 +89,10 @@ def _safe_local_file(root: Path, relative: str) -> Path:
     for segment in p.parts:
         candidate = candidate / segment
         try:
-            mode = candidate.lstat().st_mode
+            st = candidate.lstat()
         except OSError as exc:
             raise BindingError("receipt_file_missing") from exc
-        if stat.S_ISLNK(mode):
+        if _link_stat(st):
             raise BindingError("receipt_symlink_forbidden")
     if not candidate.is_file() or not candidate.resolve().is_relative_to(root):
         raise BindingError("receipt_not_regular_file")
@@ -125,12 +139,12 @@ def verify_local_bindings(index_path: str, evidence_root: str, signal: dict) -> 
     independence, DB durability, receipt signer, remote ACK or host authorization.
     """
     root = Path(evidence_root).absolute()
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or is_link(root):
         raise BindingError("invalid_evidence_root")
-    # Avoid a symlink anywhere in an explicitly supplied root.
+    # Avoid a symlink or junction anywhere in an explicitly supplied root.
     current = root
     while current != current.parent:
-        if current.is_symlink():
+        if is_link(current):
             raise BindingError("symlink_evidence_root_forbidden")
         current = current.parent
     index = Path(index_path).absolute()

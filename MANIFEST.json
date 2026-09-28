@@ -36,7 +36,7 @@
     {
       "path": "components/o_prep_v0_3/SOURCE_PIN.json",
       "bytes": 328,
-      "sha256": "73ecbbe00cb396b21ac36bd22db4570ac07bd8b823749fbd25eacfc997762f15"
+      "sha256": "ae2e51c9828f05d34f13525ebf017ef388d6ead9ca3e0db2fc913935ca255842"
     },
     {
       "path": "components/o_prep_v0_3/schemas/decision.schema.json",
@@ -55,8 +55,8 @@
     },
     {
       "path": "components/o_prep_v0_3/src/evidence_bindings.py",
-      "bytes": 10524,
-      "sha256": "6aa7d17728e5e8b68d64c421fb0f1297ae345ae8bfadf2f58fea97ae12e8b543"
+      "bytes": 11014,
+      "sha256": "59294c9597922187dd5e3c8f38298058c3ff143ce066d50be8ab97d7552bb5b5"
     },
     {
       "path": "components/o_prep_v0_3/src/o_prep.py",
@@ -75,8 +75,8 @@
     },
     {
       "path": "components/o_prep_v0_3/tests/test_v03_hardening.py",
-      "bytes": 13551,
-      "sha256": "5ba8479e3147a387cb4c4c0e3e97bc2ea054b350858abba72310c6dac1dd2425"
+      "bytes": 15833,
+      "sha256": "cc39370c231bddc25f90a06b1cda1f049abeff390e0a8f726c807a4e6358057d"
     },
     {
       "path": "evidence/prior_simulation_baseline.json",

@@ -8,13 +8,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 sys.path.insert(0,str(ROOT/'tests'))
 from o_prep import (OPrepError, _read_json, _secure_out_file, audit_transport_bundle,
                     evaluate_signal, evaluate_bound_signal, validate_signal)
-from evidence_bindings import BindingError, verify_local_bindings
+from evidence_bindings import BindingError, is_link, verify_local_bindings
 from test_o_prep import signal, ArchiveAuditTests
 try:
     from jsonschema import Draft202012Validator, ValidationError
@@ -188,6 +190,50 @@ class V03LocalBindingTests(unittest.TestCase):
         schema=json.loads((ROOT/'schemas'/'receipt_index.schema.json').read_text())
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(self.idx)
+
+
+def reparse_points(*paths):
+    """Report FILE_ATTRIBUTE_REPARSE_POINT (an NTFS junction) for exactly these paths."""
+    marked={str(Path(p).absolute()) for p in paths};real=Path.lstat
+    def fake(self,*a,**k):
+        st=real(self,*a,**k)
+        return SimpleNamespace(st_mode=st.st_mode,st_file_attributes=0x400) if str(self.absolute()) in marked else st
+    return patch.object(Path,'lstat',fake)
+
+
+class V03JunctionBindingTests(unittest.TestCase):
+    """Path.is_symlink()/S_ISLNK do not report NTFS junctions."""
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name)/'private';self.root.mkdir()
+        self.s,self.idx,self.idxpath=binding_fixture(self.root)
+
+    def test_reparse_point_is_a_link(self):
+        with reparse_points(self.root):self.assertTrue(is_link(self.root))
+        self.assertFalse(is_link(self.root))
+
+    def test_junction_evidence_root_fails_closed(self):
+        with reparse_points(self.root),self.assertRaisesRegex(BindingError,'invalid_evidence_root'):
+            verify_local_bindings(str(self.idxpath),str(self.root),self.s)
+
+    def test_junction_evidence_root_ancestor_fails_closed(self):
+        with reparse_points(self.root.parent),self.assertRaisesRegex(BindingError,'symlink_evidence_root_forbidden'):
+            verify_local_bindings(str(self.idxpath),str(self.root),self.s)
+
+    def test_junction_receipt_component_fails_closed(self):
+        item=self.idx['receipts'][0]
+        with reparse_points(self.root/item['path']),self.assertRaisesRegex(BindingError,'receipt_symlink_forbidden'):
+            verify_local_bindings(str(self.idxpath),str(self.root),self.s)
+
+    def test_junction_receipt_index_fails_closed(self):
+        with reparse_points(self.idxpath),self.assertRaisesRegex(BindingError,'receipt_symlink_forbidden'):
+            verify_local_bindings(str(self.idxpath),str(self.root),self.s)
+
+    def test_unmarked_tree_still_advances(self):
+        with reparse_points(Path(self.temp.name)/'unrelated'):
+            r=evaluate_bound_signal(self.s,str(self.idxpath),str(self.root))
+        self.assertEqual(r['next_action'],'ADVANCE_CANDIDATE')
 
 
 class V03OutputTests(unittest.TestCase):
