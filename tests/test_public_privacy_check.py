@@ -23,3 +23,23 @@ class PrivacyScannerTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as td:
    Path(td,'artifact_'+str(1)+chr(65)+'.md').write_text('generic')
    self.assertTrue(scan(Path(td)))
+
+ def test_non_utf8_binary_marker_is_not_skipped(self):
+  with tempfile.TemporaryDirectory() as td:
+   marker=('Leonardo'+'-P3-addon').encode('ascii')
+   Path(td,'fixture.bin').write_bytes(bytes((255,))+b'prefix '+marker+bytes((254,)))
+   self.assertTrue(scan(Path(td)))
+ def test_bomless_utf16le_marker_is_detected(self):
+  with tempfile.TemporaryDirectory() as td:
+   marker=('Leonardo'+'-P3-addon').encode('utf-16-le')
+   Path(td,'fixture.bin').write_bytes(marker)
+   self.assertTrue(scan(Path(td)))
+ def test_mixed_binary_utf16be_odd_alignment_is_detected(self):
+  with tempfile.TemporaryDirectory() as td:
+   marker=('Leonardo'+'-P3-addon').encode('utf-16-be')
+   Path(td,'fixture.bin').write_bytes(bytes((255,0))+marker)
+   self.assertTrue(scan(Path(td)))
+ def test_clean_binary_remains_clean(self):
+  with tempfile.TemporaryDirectory() as td:
+   Path(td,'fixture.bin').write_bytes(bytes((255,0))+b'public'+bytes((254,)))
+   self.assertEqual(scan(Path(td)),[])

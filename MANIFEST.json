@@ -185,13 +185,13 @@
     },
     {
       "path": "tests/test_public_privacy_check.py",
-      "bytes": 1228,
-      "sha256": "903663793d9ab0493f3d55c4e74a7cd592fe779aeb994631a3f6381e3975db83"
+      "bytes": 2195,
+      "sha256": "b799036fa6a677c44d8f77bbf20e449502eead0ef94d4e24d251144ee6eeb1ad"
     },
     {
       "path": "tools/public_privacy_check.py",
-      "bytes": 1996,
-      "sha256": "eebf0a52cd717b4c102cc3a77ab18d9a70bce8f1b6da739ebae186ab2897d686"
+      "bytes": 3178,
+      "sha256": "c782169e567641b78a68206bad8123a8c94065d9f7884c5037329f930658a54a"
     },
     {
       "path": "tools/replay_simulation.py",
@@ -200,8 +200,8 @@
     },
     {
       "path": "tools/verify_package.py",
-      "bytes": 2731,
-      "sha256": "a217db83ad966cd3e8a2d5106d30a6336a11e596ca9bb6ac93682447b50212f0"
+      "bytes": 2798,
+      "sha256": "841790182eda66f717d5319735ee0ae8ff2d8abcc1cf4f0456e07962c05b51df"
     }
   ],
   "evidence_boundary": "SYNTHETIC_ONLY_PUBLIC_DERIVATIVE_NOT_ORIGINAL_VENDOR_APPROVAL"

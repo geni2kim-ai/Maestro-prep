@@ -43,3 +43,7 @@ The manual-only `.github/workflows/external-conformance-draft.yml` deliberately 
 ## 9. Separate red-team work order (F3 follow-up)
 
 [Independent red-team checklist — DRAFT](RED_TEAM_CHECKLIST_DRAFT.md) identifies 12 adversarial probes, independent evidence custody, accepted verdict vocabulary and explicit owner/reviewer separation. This assistant **authored the checklist only** and did not conduct independent red-team execution, submit a verdict or acquire review authority. Actual execution and adjudication remain `NOT_RUN` / `NOT_GRANTED` pending assignment of a distinct reviewer.
+
+## 10. Owner-commissioned ChatGPT source and workflow robustness review
+
+This repository may receive an owner-commissioned ChatGPT review of the current checkout's source and workflow. Since ChatGPT also authored the prior checklist, such a review is **same-lineage**, not a claim of an organizationally independent human or agent assessment. The reviewer may correct directly verifiable source defects and record exact-commit main CI and synthetic fixtures. Review findings, skips and out-of-scope owner steps are documented separately in `evidence/evidence_v0.1.0-public-redacted-hotfix_redteam1.md`. Current-file scanner covers UTF-8, binary ASCII fragments and UTF-16 (either byte alignment), but does **not** authenticate historical Git objects, encrypted/compressed opaque blobs or archive provenance. Owner release digest comparison, approved external reference and host review remain separate.
