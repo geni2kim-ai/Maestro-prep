@@ -16,7 +16,7 @@ import stat
 import sys
 import zipfile
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, NoReturn, Sequence
 from evidence_bindings import verify_local_bindings, BindingError, is_link
 
 VERSION = "0.3.0-prep"
@@ -25,6 +25,8 @@ MAX_ZIP_MEMBERS = 128
 MAX_UNCOMPRESSED = 25 * 1024 * 1024
 MAX_MEMBER_BYTES = 10 * 1024 * 1024
 ALLOWED_STAGES = ("PLAN", "EXECUTE", "PUBLISH", "CLOSE")
+JsonDict = dict[str, Any]
+
 PRIORITY = [
     "STOP_DISCLOSURE", "STOP_ROUTER_WRITE", "STOP_MUTATION", "HOLD_SOURCE",
     "HOLD_EVIDENCE", "HOLD_ROUTING", "HOLD_REVIEW", "REWORK", "HOLD_DELIVERY",
@@ -41,14 +43,14 @@ def _sha256(data: bytes) -> str:
 
 
 def _read_json(payload: bytes, label: str) -> Any:
-    def no_duplicates(pairs):
-        d = {}
+    def no_duplicates(pairs: list[tuple[str, Any]]) -> JsonDict:
+        d: JsonDict = {}
         for key, value in pairs:
             if key in d:
                 raise OPrepError(f"duplicate_json_key:{label}")
             d[key] = value
         return d
-    def no_constants(_):
+    def no_constants(_value: str) -> NoReturn:
         raise OPrepError(f"nonfinite_json_number:{label}")
     try:
         return json.loads(payload, object_pairs_hook=no_duplicates, parse_constant=no_constants)
@@ -83,7 +85,7 @@ def _is_safe_member(info: zipfile.ZipInfo) -> bool:
     return True
 
 
-def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) -> dict:
+def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) -> JsonDict:
     """Audit transported SUBJECT evidence bytes. Report local evidence discrepancies only.
 
     No original SUBJECT router, host SQLite DB, or raw runner is present in this bundle;
@@ -108,7 +110,7 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
             raise OPrepError("archive_expansion_limit")
         if "manifest.json" not in names:
             raise OPrepError("manifest_missing")
-        content = {}
+        content: dict[str, bytes] = {}
         try:
             for m in members:
                 if m.is_dir():
@@ -123,7 +125,7 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     entries = manifest["entries"]
     if (len(entries) + 1 != len(content) or manifest.get("total_entries") != len(content)):
         raise OPrepError("manifest_entry_count_mismatch")
-    listed = set()
+    listed: set[str] = set()
     for item in entries:
         if not isinstance(item, dict) or not isinstance(item.get("relative_path"), str):
             raise OPrepError("manifest_entry_shape_invalid")
@@ -155,7 +157,7 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     if any(not isinstance(item, list) for item in (branch_probes, episodes)) or not isinstance(ledger, dict):
         raise OPrepError("evidence_shape_invalid")
 
-    findings: list[dict] = []
+    findings: list[dict[str, str]] = []
     def flag(code: str, severity: str, detail: str) -> None:
         findings.append({"code": code, "severity": severity, "detail": detail})
 
@@ -187,7 +189,7 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     end = _utc(window["window_end_utc"])
     if end <= start:
         raise OPrepError("invalid_window_bounds")
-    counted: list[dict] = []
+    counted: list[JsonDict] = []
     for row in rows:
         try:
             created = _utc(row["created_at"])
@@ -250,13 +252,13 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     }
 
 
-def _require_type(obj: dict, key: str, kind: type, label: str) -> Any:
+def _require_type(obj: JsonDict, key: str, kind: type[object], label: str) -> Any:
     if key not in obj or not isinstance(obj[key], kind) or (kind is int and isinstance(obj[key], bool)):
         raise OPrepError(f"invalid_{label}.{key}")
     return obj[key]
 
 
-def validate_signal(signal: dict) -> None:
+def validate_signal(signal: JsonDict) -> None:
     if not isinstance(signal, dict) or signal.get("schema") != "O_PREP_SIGNAL_V1":
         raise OPrepError("invalid_signal_schema")
     allowed_top = {"schema", "work_unit", "node_id", "captured_at_utc", "stage", "router", "evidence", "execution", "review", "delivery", "assertions", "metrics", "open_gates"}
@@ -326,7 +328,7 @@ def validate_signal(signal: dict) -> None:
         raise OPrepError("invalid_idempotency_key")
 
 
-def evaluate_signal(signal: dict) -> dict:
+def evaluate_signal(signal: JsonDict) -> JsonDict:
     """Deterministic candidate-only decision. No host authority can be returned."""
     validate_signal(signal)
     stage = signal["stage"]
@@ -336,7 +338,7 @@ def evaluate_signal(signal: dict) -> dict:
     review = signal["review"]
     delivery = signal["delivery"]
     assertions = signal["assertions"]
-    issues = []
+    issues: list[dict[str, str]] = []
     def issue(code: str, state: str) -> None:
         issues.append({"code": code, "state": state})
 
@@ -424,7 +426,7 @@ def evaluate_signal(signal: dict) -> dict:
     }
 
 
-def evaluate_bound_signal(signal: dict, receipt_index_path: str, evidence_root: str) -> dict:
+def evaluate_bound_signal(signal: JsonDict, receipt_index_path: str, evidence_root: str) -> JsonDict:
     """Candidate evaluation with independently re-hashed *local bytes*.
 
     Receipt content can still be producer-provided or spoofed. This method cannot
@@ -490,7 +492,7 @@ def _check_out_path(path: Path) -> None:
         raise OPrepError("symlink_output_not_allowed")
 
 
-def _main(argv=None) -> int:
+def _main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Offline candidate-only O-Prep (no host effects)")
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_audit = sub.add_parser("audit-transport", help="read-only transported archive verification")

@@ -13,6 +13,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+from typing import Any, NoReturn, cast
 
 HASH = re.compile(r"^[a-f0-9]{64}$")
 ALLOWED_ROLES = frozenset({
@@ -23,6 +24,7 @@ MAX_INDEX_BYTES = 128 * 1024
 MAX_ARTIFACT_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 8 * 1024 * 1024
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+JsonDict = dict[str, Any]
 
 
 class BindingError(ValueError):
@@ -42,8 +44,8 @@ def is_link(path: Path) -> bool:
         return False
 
 
-def _unique_pairs(pairs):
-    result = {}
+def _unique_pairs(pairs: list[tuple[str, Any]]) -> JsonDict:
+    result: JsonDict = {}
     for key, value in pairs:
         if key in result:
             raise BindingError("duplicate_receipt_index_json_key")
@@ -51,18 +53,18 @@ def _unique_pairs(pairs):
     return result
 
 
-def _bad_constant(_):
+def _bad_constant(_value: str) -> NoReturn:
     raise BindingError("nonfinite_receipt_index_number")
 
 
-def _json(data: bytes, what: str) -> dict:
+def _json(data: bytes, what: str) -> JsonDict:
     try:
         value = json.loads(data, object_pairs_hook=_unique_pairs, parse_constant=_bad_constant)
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise BindingError(f"invalid_{what}_json") from exc
     if not isinstance(value, dict):
         raise BindingError(f"invalid_{what}_shape")
-    return value
+    return cast(JsonDict, value)
 
 
 def _time(s: str) -> datetime:
@@ -119,7 +121,7 @@ def _read_limited(p: Path, max_bytes: int) -> bytes:
         raise BindingError("receipt_file_unreadable") from exc
 
 
-def _required_roles(signal: dict) -> set[str]:
+def _required_roles(signal: JsonDict) -> set[str]:
     roles = {"router_input", "router_policy", "router_output"}
     if signal["stage"] in {"PUBLISH", "CLOSE"}:
         roles |= {"review_subject", "review_receipt"}
@@ -132,7 +134,7 @@ def _required_roles(signal: dict) -> set[str]:
     return roles
 
 
-def verify_local_bindings(index_path: str, evidence_root: str, signal: dict) -> dict:
+def verify_local_bindings(index_path: str, evidence_root: str, signal: JsonDict) -> JsonDict:
     """Return only presence/hash/cross-reference facts, never raw content or paths.
 
     `LOCAL_BYTES_VERIFIED_ONLY` is *not* validation of Leonardo's status, a reviewer's
@@ -168,7 +170,7 @@ def verify_local_bindings(index_path: str, evidence_root: str, signal: dict) -> 
     seen_roles: set[str] = set()
     seen_paths: set[str] = set()
     checked: dict[str, bytes] = {}
-    issues = []
+    issues: list[dict[str, str]] = []
     total = 0
     for row in rows:
         if not isinstance(row, dict) or set(row) != {"role", "path", "sha256", "size_bytes"}:
