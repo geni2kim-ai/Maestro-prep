@@ -39,6 +39,6 @@ jobs:
       - name: Strict type check for offline verification gate (component)
         env:
           MYPYPATH: components/o_prep_v0_3/src
-        run: python -m mypy --strict maestro_prep/coordinator.py components/o_prep_v0_3/src/o_prep.py components/o_prep_v0_3/src/evidence_bindings.py
+        run: python -m mypy --strict --cache-dir "${{ runner.temp }}/mypy-cache" maestro_prep/coordinator.py components/o_prep_v0_3/src/o_prep.py components/o_prep_v0_3/src/evidence_bindings.py
       - name: Verify public payload and synthetic regression checks
         run: python .github/scripts/main_ci.py
