@@ -158,7 +158,7 @@ def vendor_module() -> OPrepModule:
 
 
 def _astra_binding(work: JsonDict, lock: JsonDict, root: Path, skill_path: Path | None, plan_receipt_rel: str | None) -> list[str]:
-    issues=[]
+    issues: list[str] = []
     if work['intent'] == 'READ_ONLY': return issues
     if skill_path is None: return ['HOLD_PLAN_MODULE_MISSING']
     try:
@@ -217,7 +217,7 @@ def decide(work: JsonDict, lock: JsonDict, o_signal: JsonDict, index_path: Path,
     # The root and every ancestor must be link-free, including junctions the pinned O-Prep check misses.
     if not evidence_root.is_dir() or not _link_free_ancestry(evidence_root):raise ContractError('EVIDENCE_ROOT_INVALID')
     if (work['work_unit'],work['node_id'],work['stage'],_timezone(work['captured_at_utc'])) != (
-            o_signal.get('work_unit'),o_signal.get('node_id'),o_signal.get('stage'),_timezone(o_signal.get('captured_at_utc'))):
+            o_signal.get('work_unit'),o_signal.get('node_id'),o_signal.get('stage'),_timezone(cast(str, o_signal.get('captured_at_utc')))):
         raise ContractError('O_SIGNAL_WORK_BINDING_MISMATCH')
     try:
         o = vendor_module()

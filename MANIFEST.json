@@ -165,8 +165,8 @@
     },
     {
       "path": "maestro_prep/coordinator.py",
-      "bytes": 14418,
-      "sha256": "a7eb4b12193c171c3c1de33a8f754b72eeffa5cb98f2e1f4ccbba8649ce9a359"
+      "bytes": 14442,
+      "sha256": "cf12e882ba16cefc103c792f9dfd088e3951004ae2cd141af28870157f76d8e9"
     },
     {
       "path": "schemas/lock.schema.json",
