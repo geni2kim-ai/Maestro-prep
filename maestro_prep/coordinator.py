@@ -14,12 +14,24 @@ import stat
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn, Protocol, cast
 
 BASE = Path(__file__).resolve().parents[1]
 VENDOR = BASE / 'components' / 'o_prep_v0_3' / 'src'
 SHA256 = re.compile(r'^[a-f0-9]{64}$')
 _REPARSE_POINT = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
+JsonDict = dict[str, Any]
+
+
+class OPrepModule(Protocol):
+    __file__: str | None
+    OPrepError: type[Exception]
+    VERSION: str
+
+    def evaluate_bound_signal(
+        self, signal: JsonDict, receipt_index_path: str, evidence_root: str
+    ) -> JsonDict: ...
+
 
 class ContractError(ValueError):
     """Non-sensitive failure code; never include node-local paths or data."""
@@ -29,18 +41,18 @@ def _hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _json_bytes(data: bytes, code: str) -> dict:
-    def unique(pairs):
-        out = {}
+def _json_bytes(data: bytes, code: str) -> JsonDict:
+    def unique(pairs: list[tuple[str, Any]]) -> JsonDict:
+        out: JsonDict = {}
         for k, v in pairs:
             if k in out: raise ContractError('DUPLICATE_JSON_KEY')
             out[k] = v
         return out
-    def bad_constant(_): raise ContractError('NONFINITE_JSON_NUMBER')
+    def bad_constant(_value: str) -> NoReturn: raise ContractError('NONFINITE_JSON_NUMBER')
     try: obj = json.loads(data.decode('utf-8'), object_pairs_hook=unique, parse_constant=bad_constant)
     except (UnicodeError, json.JSONDecodeError) as exc: raise ContractError(code) from exc
     if not isinstance(obj, dict): raise ContractError(code)
-    return obj
+    return cast(JsonDict, obj)
 
 
 def _is_link(path: Path) -> bool:
@@ -58,7 +70,7 @@ def _link_free_ancestry(path: Path) -> bool:
         current = current.parent
 
 
-def read_json(path: Path, cap: int = 131072) -> dict:
+def read_json(path: Path, cap: int = 131072) -> JsonDict:
     if _is_link(path) or not path.is_file() or path.stat().st_size > cap:
         raise ContractError('JSON_SOURCE_MISSING_OR_INVALID')
     return _json_bytes(path.read_bytes(), 'INVALID_JSON_SOURCE')
@@ -74,7 +86,7 @@ def _timezone(value: str) -> datetime:
     except ValueError as exc: raise ContractError('INVALID_TIMESTAMP') from exc
 
 
-def _fields(obj: dict, names: set[str], code: str) -> None:
+def _fields(obj: JsonDict, names: set[str], code: str) -> None:
     if set(obj) != names: raise ContractError(code)
 
 
@@ -82,7 +94,7 @@ def _sha(value: str, code: str) -> None:
     if not isinstance(value, str) or not SHA256.fullmatch(value): raise ContractError(code)
 
 
-def check_work(work: dict) -> None:
+def check_work(work: JsonDict) -> None:
     _fields(work, {'schema','work_unit','node_id','captured_at_utc','stage','intent','task_sha256','plan_sha256'}, 'WORK_FIELDS_INVALID')
     if work['schema'] != 'MAESTRO_PREP_WORK_V1' or work['stage'] not in {'PLAN','EXECUTE','PUBLISH','CLOSE'}:
         raise ContractError('WORK_SCHEMA_OR_STAGE_INVALID')
@@ -99,7 +111,7 @@ def check_work(work: dict) -> None:
         raise ContractError('READ_ONLY_STAGE_INVALID')
 
 
-def check_lock(lock: dict) -> None:
+def check_lock(lock: JsonDict) -> None:
     _fields(lock, {'schema','astra','leonardo'}, 'LOCK_FIELDS_INVALID')
     if lock['schema'] != 'MAESTRO_PREP_LOCK_V1': raise ContractError('LOCK_SCHEMA_INVALID')
     _fields(lock['astra'], {'skill_sha256','approved_version_label'}, 'ASTRA_LOCK_INVALID')
@@ -127,7 +139,7 @@ def _relative_file(root: Path, rel: str, limit: int = 1024*1024) -> bytes:
     return node.read_bytes()
 
 
-def vendor_module():
+def vendor_module() -> OPrepModule:
     """Verify O-Prep exact copied source against this package's pinned manifest."""
     manifest = read_json(BASE / 'components' / 'o_prep_v0_3' / 'SOURCE_PIN.json')
     if manifest.get('component') != 'o-prep' or manifest.get('version') != '0.3.0-prep':
@@ -139,13 +151,14 @@ def vendor_module():
             raise ContractError('O_MODULE_HASH_MISMATCH')
     if str(VENDOR) not in sys.path: sys.path.insert(0,str(VENDOR))
     module = importlib.import_module('o_prep')
-    if Path(module.__file__).resolve() != (VENDOR/'o_prep.py').resolve():
+    module_file = getattr(module, '__file__', None)
+    if not isinstance(module_file, str) or Path(module_file).resolve() != (VENDOR/'o_prep.py').resolve():
         raise ContractError('O_MODULE_IMPORT_PATH_MISMATCH')
-    return module
+    return cast(OPrepModule, module)
 
 
-def _astra_binding(work: dict, lock: dict, root: Path, skill_path: Path | None, plan_receipt_rel: str | None) -> list[str]:
-    issues=[]
+def _astra_binding(work: JsonDict, lock: JsonDict, root: Path, skill_path: Path | None, plan_receipt_rel: str | None) -> list[str]:
+    issues: list[str] = []
     if work['intent'] == 'READ_ONLY': return issues
     if skill_path is None: return ['HOLD_PLAN_MODULE_MISSING']
     try:
@@ -171,7 +184,7 @@ def _astra_binding(work: dict, lock: dict, root: Path, skill_path: Path | None, 
     return issues
 
 
-def _route_binding(work: dict, lock: dict, root: Path, index_path: Path, route_rel: str | None) -> list[str]:
+def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path, route_rel: str | None) -> list[str]:
     if not route_rel: return ['HOLD_LEONARDO_ROUTE_CAPTURE_MISSING']
     receipt = _json_bytes(_relative_file(root, route_rel), 'LEONARDO_RECEIPT_JSON_INVALID')
     required = {'schema','work_unit','node_id','router_version','task_sha256','policy_sha256',
@@ -196,15 +209,15 @@ def _route_binding(work: dict, lock: dict, root: Path, index_path: Path, route_r
     return []
 
 
-def decide(work: dict, lock: dict, o_signal: dict, index_path: Path, evidence_root: Path,
+def decide(work: JsonDict, lock: JsonDict, o_signal: JsonDict, index_path: Path, evidence_root: Path,
            *, astra_skill_path: Path | None = None, astra_plan_receipt_rel: str | None = None,
-           leonardo_route_rel: str | None = None) -> dict:
+           leonardo_route_rel: str | None = None) -> JsonDict:
     """Mandatory O-Prep bound gate; never executes Astra, Leonardo or host mutations."""
     check_work(work); check_lock(lock)
     # The root and every ancestor must be link-free, including junctions the pinned O-Prep check misses.
     if not evidence_root.is_dir() or not _link_free_ancestry(evidence_root):raise ContractError('EVIDENCE_ROOT_INVALID')
     if (work['work_unit'],work['node_id'],work['stage'],_timezone(work['captured_at_utc'])) != (
-            o_signal.get('work_unit'),o_signal.get('node_id'),o_signal.get('stage'),_timezone(o_signal.get('captured_at_utc'))):
+            o_signal.get('work_unit'),o_signal.get('node_id'),o_signal.get('stage'),_timezone(cast(str, o_signal.get('captured_at_utc')))):
         raise ContractError('O_SIGNAL_WORK_BINDING_MISMATCH')
     try:
         o = vendor_module()
@@ -214,7 +227,8 @@ def decide(work: dict, lock: dict, o_signal: dict, index_path: Path, evidence_ro
         decision = o.evaluate_bound_signal(o_signal,str(index_path),str(evidence_root))
     except (o.OPrepError, ValueError, OSError):
         return _result(work,None,['HOLD_O_BINDING_FAILED'],True)
-    issues = [x['code'] for x in decision['issues']]
+    decision_issues = cast(list[JsonDict], decision['issues'])
+    issues: list[str] = [cast(str, x['code']) for x in decision_issues]
     if decision['next_action'] != 'ADVANCE_CANDIDATE':
         # Do not use producer-written booleans to bypass byte checks.
         return _result(work,decision,issues,True)
@@ -228,9 +242,9 @@ def decide(work: dict, lock: dict, o_signal: dict, index_path: Path, evidence_ro
     return _result(work,decision,issues,True)
 
 
-def _result(work: dict, o_decision: dict | None, issues: list[str], o_invoked: bool) -> dict:
+def _result(work: JsonDict, o_decision: JsonDict | None, issues: list[str], o_invoked: bool) -> JsonDict:
     # O-Prep stop/hold is never overridden by Astra READY or a Leonardo branch.
-    current = o_decision['next_action'] if o_decision is not None else ('HOLD_O_BINDING_FAILED' if 'HOLD_O_BINDING_FAILED' in issues else 'HOLD_O_MODULE_MISSING')
+    current = cast(str, o_decision['next_action']) if o_decision is not None else ('HOLD_O_BINDING_FAILED' if 'HOLD_O_BINDING_FAILED' in issues else 'HOLD_O_MODULE_MISSING')
     if current != 'ADVANCE_CANDIDATE':
         next_action=current
     elif issues:
@@ -248,7 +262,7 @@ def _result(work: dict, o_decision: dict | None, issues: list[str], o_invoked: b
     }
 
 
-def verify_generic_file(path: Path, expected_sha: str) -> dict:
+def verify_generic_file(path: Path, expected_sha: str) -> JsonDict:
     _sha(expected_sha,'EXPECTED_HASH_INVALID')
     if not path.is_file() or _is_link(path) or path.stat().st_size > 25*1024*1024:
         raise ContractError('AUDIT_FILE_INVALID')
