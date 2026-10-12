@@ -12,6 +12,8 @@ SPEC.loader.exec_module(CI)
 
 class CIAccountingTests(unittest.TestCase):
     def simulate(self, name, kind, text):
+        if kind == "component" and CI.os.name == "nt":
+            text = "VENDOR_PLATFORM_EXCEPTION\n" + text
         fake = subprocess.CompletedProcess(["python"], 0, stdout="", stderr=text)
         with patch.object(CI.subprocess, "run", return_value=fake):
             return CI.run_case(name, ["-m", "unittest"], kind)
@@ -33,11 +35,13 @@ class CIAccountingTests(unittest.TestCase):
         self.assertFalse(item["passed"])
     def test_installed_optional_schema_runs_all_without_skips(self):
         with patch.object(CI.importlib.util, "find_spec", return_value=object()):
-            item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK\n")
+            suffix = "OK (skipped=1)\n" if CI.os.name == "nt" else "OK\n"
+            item = self.simulate("public_component_tests", "component", "Ran 70 tests\n" + suffix)
         self.assertTrue(item["passed"])
     def test_missing_optional_schema_requires_five_skips(self):
         with patch.object(CI.importlib.util, "find_spec", return_value=None):
-            item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK (skipped=5)\n")
+            skipped = 6 if CI.os.name == "nt" else 5
+            item = self.simulate("public_component_tests", "component", f"Ran 70 tests\nOK (skipped={skipped})\n")
         self.assertTrue(item["passed"])
 
 if __name__ == "__main__":
