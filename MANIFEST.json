@@ -30,8 +30,8 @@
     },
     {
       "path": "adapters/LEONARDO_INTEGRATION_CONTRACT.md",
-      "bytes": 764,
-      "sha256": "b701b5b93a50ecaafe4e070e8b108d81dbef6f56706f884a7b83e25a1700ba0d"
+      "bytes": 2005,
+      "sha256": "3ef60af434e6fccf2fa16a865518370370924629930ae684394ac9dda9858d84"
     },
     {
       "path": "components/o_prep_v0_3/SOURCE_PIN.json",
@@ -165,8 +165,8 @@
     },
     {
       "path": "maestro_prep/coordinator.py",
-      "bytes": 17318,
-      "sha256": "b01ae403699722edd9a01a9b6766c21eab9cf39820c772762cff2d5b1a989ed2"
+      "bytes": 18907,
+      "sha256": "4213c910282cd8dc943482d4f6591381eb15d312cd6d22ba13fd386dbd210d4e"
     },
     {
       "path": "schemas/lock.schema.json",
@@ -180,8 +180,8 @@
     },
     {
       "path": "tests/test_maestro.py",
-      "bytes": 23143,
-      "sha256": "ece1e5ae17707a89ca64e04a12d161263e96cb8f4476e5ac490324bd31f286e0"
+      "bytes": 27284,
+      "sha256": "06898ad45ab530af85e15537720fc20d31edf3ce49ae35b45244636cadaaa7c4"
     },
     {
       "path": "tests/test_public_privacy_check.py",

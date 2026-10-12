@@ -26,7 +26,16 @@ class Fixture(unittest.TestCase):
         t=tempfile.TemporaryDirectory();self.addCleanup(t.cleanup)
         self.tmp=Path(t.name);self.root=self.tmp/'private';self.root.mkdir()
         self.astra=self.tmp/'approved_astra_skill.md';self.astra.write_bytes(b'SYNTHETIC-ONLY ASTRA-PLAN SKILL')
-        self.task=b'SYNTHETIC LEONARDO TASK';self.policy=b'SYNTHETIC LEONARDO POLICY';self.route=b'{"route":"synthetic"}'
+        self.task=b'SYNTHETIC LEONARDO TASK';self.policy=b'SYNTHETIC LEONARDO POLICY'
+        # R3-shaped synthetic raw router contract; not a real Leonardo receipt.
+        self.route=json.dumps({
+            'schema_version': 'SYNTHETIC_ROUTER_CONTRACT_V1',
+            'execution_state': 'READY_FOR_LOCAL_CANDIDATE_WORK',
+            'candidate_work_allowed': True,
+            'request': {'request_sha256': HASH(self.task)},
+            'input_bindings': {'policy_sha256': HASH(self.policy)},
+            'guard': {'blocks': []},
+        }, sort_keys=True).encode('utf-8')
         self.work={'schema':'MAESTRO_PREP_WORK_V1','work_unit':'SYNTHETIC-UNIT-TEST','node_id':'synthetic',
                    'captured_at_utc':TS,'stage':'PLAN','intent':'NEW_PLAN','task_sha256':HASH(self.task),'plan_sha256':None}
         self.lock={'schema':'MAESTRO_PREP_LOCK_V1','astra':{'skill_sha256':HASH(self.astra.read_bytes()),'approved_version_label':'SYNTHETIC-ONLY'},
@@ -355,6 +364,82 @@ class CoordinatorTests(Fixture):
         after = (sys.modules.get('o_prep'), sys.modules.get('evidence_bindings'))
         self.assertEqual(result['next_action'], 'BOUND_CANDIDATE_CHECKS_PASSED')
         self.assertEqual(before, after)
+
+
+    def update_raw_route(self, raw):
+        payload = json.dumps(raw, sort_keys=True).encode('utf-8')
+        (self.root / 'receipts/router_output.bin').write_bytes(payload)
+        for row in self.receipts:
+            if row['role'] == 'router_output':
+                row['sha256'] = HASH(payload)
+                row['size_bytes'] = len(payload)
+        self.save_index()
+        capture = read_json(self.root / self.route_rel)
+        capture['routing_output_sha256'] = HASH(payload)
+        self.write_json(self.route_rel, capture)
+        return payload
+
+    def test_capture_ready_cannot_override_raw_blocked_leonardo_contract(self):
+        raw = json.loads(self.route)
+        raw['execution_state'] = 'BLOCKED_BY_LOCAL_POLICY'
+        raw['candidate_work_allowed'] = False
+        self.update_raw_route(raw)
+        result = self.invoke()
+        self.assertIn('HOLD_LEONARDO_RAW_ROUTE_NOT_READY', result['issue_codes'])
+        self.assertEqual(result['next_action'], 'HOLD_INTEGRATION')
+
+    def test_capture_ready_cannot_override_raw_policy_mismatch(self):
+        raw = json.loads(self.route)
+        raw['input_bindings']['policy_sha256'] = HASH(b'FORGED POLICY')
+        self.update_raw_route(raw)
+        self.assertIn('HOLD_LEONARDO_RAW_ROUTE_BINDING', self.invoke()['issue_codes'])
+
+    def test_capture_ready_cannot_override_raw_request_mismatch(self):
+        raw = json.loads(self.route)
+        raw['request']['request_sha256'] = HASH(b'OTHER TASK')
+        self.update_raw_route(raw)
+        self.assertIn('HOLD_LEONARDO_RAW_ROUTE_BINDING', self.invoke()['issue_codes'])
+
+    def test_capture_ready_rejects_nonboolean_candidate_flag(self):
+        raw = json.loads(self.route)
+        raw['candidate_work_allowed'] = 1
+        self.update_raw_route(raw)
+        self.assertIn('HOLD_LEONARDO_RAW_ROUTE_NOT_READY', self.invoke()['issue_codes'])
+
+    def test_raw_router_output_modified_after_o_prep_gate_is_hold(self):
+        o = vendor_module()
+        evaluated = o.evaluate_bound_signal
+        def mutate_after_gate(*args):
+            value = evaluated(*args)
+            (self.root / 'receipts/router_output.bin').write_bytes(b'AFTER_GATE_TAMPER')
+            return value
+        with patch('maestro_prep.coordinator.vendor_module') as injected:
+            injected.return_value.evaluate_bound_signal.side_effect = mutate_after_gate
+            result = self.invoke()
+        self.assertIn('HOLD_LEONARDO_ARTIFACT_BYTES_CHANGED', result['issue_codes'])
+
+    def test_broken_raw_router_shape_is_held_even_if_capture_ready(self):
+        self.update_raw_route({'execution_state':'READY_FOR_LOCAL_CANDIDATE_WORK',
+                               'candidate_work_allowed': True})
+        self.assertIn('HOLD_LEONARDO_RAW_ROUTE_BINDING', self.invoke()['issue_codes'])
+
+    def test_malformed_router_guard_fails_closed(self):
+        for guard in (None, [], {'blocks': None}, {'blocks': 'invalid'}):
+            with self.subTest(guard=guard):
+                raw = json.loads(self.route)
+                raw['guard'] = guard
+                self.update_raw_route(raw)
+                self.assertIn('HOLD_LEONARDO_RAW_ROUTE_NOT_READY', self.invoke()['issue_codes'])
+
+    def test_nonobject_raw_output_fails_closed(self):
+        self.update_raw_route(['READY_FOR_LOCAL_CANDIDATE_WORK'])
+        self.assertIn('LEONARDO_ROUTING_OUTPUT_INVALID', self.invoke()['issue_codes'])
+
+    def test_raw_router_blocks_nonempty_even_when_flag_true(self):
+        raw = json.loads(self.route)
+        raw['guard'] = {'blocks': ['POLICY_CONFLICT']}
+        self.update_raw_route(raw)
+        self.assertIn('HOLD_LEONARDO_RAW_ROUTE_NOT_READY', self.invoke()['issue_codes'])
 
 class JunctionGuardTests(Fixture):
     """NTFS junctions are reparse points that Path.is_symlink() does not report."""

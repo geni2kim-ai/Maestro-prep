@@ -268,11 +268,37 @@ def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path,
             return ['HOLD_O_INDEX_INVALID']
         rows[row['role']] = row
     for role, captured, expected in [
-        ('router_input',receipt['task_sha256'],work['task_sha256']),
-        ('router_policy',receipt['policy_sha256'],lock['leonardo']['policy_sha256']),
-        ('router_output',receipt['routing_output_sha256'],None)]:
+        ('router_input', receipt['task_sha256'], work['task_sha256']),
+        ('router_policy', receipt['policy_sha256'], lock['leonardo']['policy_sha256']),
+        ('router_output', receipt['routing_output_sha256'], None)]:
         if role not in rows or rows[role].get('sha256') != captured or (expected is not None and captured != expected):
             return ['HOLD_LEONARDO_ARTIFACT_PIN_MISMATCH']
+    # An index SHA confirms bytes, *not* that a producer's separate READY
+    # capture agrees with those bytes. Bind the actual recorded route contract.
+    # Re-read after the O-Prep gate to detect a changed artifact between gates.
+    route_row = rows['router_output']
+    route_path = route_row.get('path')
+    if not isinstance(route_path, str):
+        return ['HOLD_LEONARDO_ARTIFACT_PIN_MISMATCH']
+    route_bytes = _relative_file(root, route_path, limit=2*1024*1024)
+    if _hash(route_bytes) != receipt['routing_output_sha256']:
+        return ['HOLD_LEONARDO_ARTIFACT_BYTES_CHANGED']
+    route = _json_bytes(route_bytes, 'LEONARDO_ROUTING_OUTPUT_INVALID')
+    # Accept only a captured *local candidate* route, never a blocked/held
+    # Leonardo contract falsely described as READY in the adapter receipt.
+    if (route.get('execution_state') != 'READY_FOR_LOCAL_CANDIDATE_WORK'
+            or route.get('candidate_work_allowed') is not True):
+        return ['HOLD_LEONARDO_RAW_ROUTE_NOT_READY']
+    request = route.get('request')
+    bindings = route.get('input_bindings')
+    if not isinstance(request, dict) or not isinstance(bindings, dict):
+        return ['HOLD_LEONARDO_RAW_ROUTE_BINDING']
+    if (request.get('request_sha256') != receipt['task_sha256']
+            or bindings.get('policy_sha256') != receipt['policy_sha256']):
+        return ['HOLD_LEONARDO_RAW_ROUTE_BINDING']
+    guard = route.get('guard')
+    if not isinstance(guard, dict) or not isinstance(guard.get('blocks'), list) or guard['blocks']:
+        return ['HOLD_LEONARDO_RAW_ROUTE_NOT_READY']
     return []
 
 
