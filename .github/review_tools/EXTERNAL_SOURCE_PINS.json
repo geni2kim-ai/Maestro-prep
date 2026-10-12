@@ -42,7 +42,10 @@
         "source_git_blob": "6f79fd4ec7e5b9f0947cb4cf086ab26c7f4c3640",
         "size": 1161
       }
-    ]
+    ],
+    "latest_examined_unverified_candidate_sha": "4198ff2683a4592e2221b75c1d34307e867c64ea",
+    "latest_candidate_branch": "review/v2.7-leonardo-r40-delta-20261012",
+    "latest_candidate_status": "OPEN_PR_8_FULL_VALIDATION_FAILED_NOT_PROMOTED"
   },
   "authority": "NONE",
   "candidate_only": true

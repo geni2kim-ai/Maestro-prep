@@ -20,3 +20,6 @@ python -I -m unittest discover -s .github/scripts -p test_codediff_shadow.py -q
 \`\`\`
 
 Use separate, fresh output directory. The report intentionally omits diff bodies and secrets. OS-level network sandbox, immutable stable review runner, GitHub required check enforcement, independent review and real Leonardo execution are **NOT_RUN**. Keep PR Draft. Upgrade neither the O-Prep gate nor any approval authority without source, CI and independent-adjudication evidence.
+
+## Further R1.6 WU4 hardening
+The official v2.5 base remains the only vendored executable reviewer policy. CodeDiff's newer v2.7 R40/R41 review branch (`4198ff2683a4592e2221b75c1d34307e867c64ea`, PR #8) had a failed full-validation check, so it is monitored only. The overlay now raises `.github/scripts/**` to a HUMAN governance floor (including future CI-accounting/test harness edits); no code review result alone may waive this floor.

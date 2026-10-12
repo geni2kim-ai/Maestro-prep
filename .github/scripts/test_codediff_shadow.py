@@ -32,6 +32,8 @@ class CodediffIntegrationTests(unittest.TestCase):
         ], merged)
         self.assertIn("maestro_prep/coordinator.py", classified["human_floor"])
         self.assertIn(".github/workflows/candidate-ci.yml", classified["governance"])
+        self.assertIn(".github/scripts/main_ci.py", engine.classify_paths(
+            [".github/scripts/main_ci.py"], merged)["human_floor"])
         self.assertIn("components/o_prep_v0_3/src/o_prep.py", classified["adversarial_floor"])
 
     def test_sha_immovable_metadata_rejected(self):

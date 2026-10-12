@@ -21,11 +21,11 @@ ROOT = Path(__file__).resolve().parents[2]
 VENDOR = ROOT / ".github" / "review_tools" / "codediff_v25"
 PIN_PATH = ROOT / ".github" / "review_tools" / "EXTERNAL_SOURCE_PINS.json"
 OVERLAY = {
-    "governance_paths": [".github/review_tools/**", ".github/scripts/codediff_shadow.py"],
+    "governance_paths": [".github/review_tools/**", ".github/scripts/**"],
     "human_floor_paths": [
         "/maestro_prep/coordinator.py", "/maestro_prep/cli.py",
         "/components/o_prep_v0_3/**", "/.github/review_tools/**",
-        "/.github/workflows/**", "/tools/verify_package.py",
+        "/.github/workflows/**", "/.github/scripts/**", "/tools/verify_package.py",
         "/MANIFEST.json", "/SHA256SUMS.txt", "/adapters/**",
     ],
     "adversarial_floor_paths": [
