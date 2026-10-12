@@ -151,6 +151,56 @@ class CoordinatorTests(Fixture):
         self.assertIn('HOLD_PLAN_MODULE_MISSING',x['issue_codes'])
         self.assertIn('HOLD_LEONARDO_ROUTE_CAPTURE_MISSING',x['issue_codes'])
 
+
+    def test_unhashable_work_stage_is_rejected_not_crashed(self):
+        for bad in ([], {}, None, 4):
+            with self.subTest(stage=bad):
+                self.work['stage'] = bad
+                with self.assertRaises(ContractError) as ctx:
+                    self.invoke()
+                self.assertEqual(str(ctx.exception), 'WORK_SCHEMA_OR_STAGE_INVALID')
+
+    def test_unhashable_work_intent_is_rejected_not_crashed(self):
+        for bad in ([], {}, None, 4):
+            with self.subTest(intent=bad):
+                self.work['intent'] = bad
+                with self.assertRaises(ContractError) as ctx:
+                    self.invoke()
+                self.assertEqual(str(ctx.exception), 'WORK_INTENT_INVALID')
+
+    def test_untrusted_nested_lock_shape_is_contract_error(self):
+        for field in ('astra', 'leonardo'):
+            for bad in ([], None, 123):
+                with self.subTest(field=field, value=bad):
+                    self.lock[field] = bad
+                    with self.assertRaises(ContractError) as ctx:
+                        self.invoke()
+                    self.assertIn(str(ctx.exception), ('ASTRA_LOCK_INVALID', 'LEONARDO_LOCK_INVALID'))
+                    self.setUp_lock_for_next_case(field)
+
+    def setUp_lock_for_next_case(self, field):
+        if field == 'astra':
+            self.lock[field] = {'skill_sha256': HASH(self.astra.read_bytes()),
+                                'approved_version_label': 'SYNTHETIC-ONLY'}
+        else:
+            self.lock[field] = {'router_version': 'SYNTHETIC-ROUTER',
+                                'policy_sha256': HASH(self.policy)}
+
+    def test_deeply_nested_json_returns_stable_hold_error(self):
+        f = self.tmp / 'nested.json'
+        f.write_text('{"x":' + '[' * 1200 + '0' + ']' * 1200 + '}')
+        with self.assertRaises(ContractError) as ctx:
+            read_json(f)
+        self.assertEqual(str(ctx.exception), 'INVALID_JSON_SOURCE')
+
+    def test_untrusted_vendor_type_error_fails_closed(self):
+        with patch('maestro_prep.coordinator.vendor_module') as vendor:
+            vendor.return_value.OPrepError = ValueError
+            vendor.return_value.evaluate_bound_signal.side_effect = TypeError('hostile nested shape')
+            result = self.invoke()
+        self.assertEqual(result['next_action'], 'HOLD_O_BINDING_FAILED')
+        self.assertFalse(result['host_mutation_authorized'])
+
 class JunctionGuardTests(Fixture):
     """NTFS junctions are reparse points that Path.is_symlink() does not report."""
     def flag(self,*paths):

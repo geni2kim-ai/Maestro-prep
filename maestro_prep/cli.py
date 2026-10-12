@@ -29,9 +29,12 @@ def main(argv=None):
         elif args.cmd=='audit-transport': out=vendor_module().audit_transport_bundle(args.zip)
         else:
             vendor_module();out={'schema':'MAESTRO_COMPONENT_CHECK_V1','o_prep_v03_pinned':True,'astra':'EXTERNAL_NOT_RUN','leonardo':'EXTERNAL_NOT_RUN'}
-    except (ContractError,ValueError,OSError) as exc:
+    except (ContractError, ValueError, OSError) as exc:
         # Errors should be stable, non-sensitive codes; no internal path disclosure.
         out={'schema':'MAESTRO_ERROR_V1','status':'HOLD','issue_code':str(exc).split(':')[0]}
+    except (TypeError, KeyError, RecursionError):
+        # Untrusted nested JSON shapes must not leak exception details or crash the CLI.
+        out={'schema':'MAESTRO_ERROR_V1','status':'HOLD','issue_code':'MALFORMED_INPUT'}
     print(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True))
     if args.cmd=='audit-transport': return 0 if out.get('manifest_verified') and not out.get('findings') else 2
     return 0 if (out.get('next_action') in {'READ_ONLY_EVIDENCE_MATCH','BOUND_CANDIDATE_CHECKS_PASSED'} or

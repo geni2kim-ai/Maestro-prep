@@ -50,7 +50,7 @@ def _json_bytes(data: bytes, code: str) -> JsonDict:
         return out
     def bad_constant(_value: str) -> NoReturn: raise ContractError('NONFINITE_JSON_NUMBER')
     try: obj = json.loads(data.decode('utf-8'), object_pairs_hook=unique, parse_constant=bad_constant)
-    except (UnicodeError, json.JSONDecodeError) as exc: raise ContractError(code) from exc
+    except (UnicodeError, json.JSONDecodeError, RecursionError) as exc: raise ContractError(code) from exc
     if not isinstance(obj, dict): raise ContractError(code)
     return cast(JsonDict, obj)
 
@@ -87,7 +87,7 @@ def _timezone(value: str) -> datetime:
 
 
 def _fields(obj: JsonDict, names: set[str], code: str) -> None:
-    if set(obj) != names: raise ContractError(code)
+    if not isinstance(obj, dict) or set(obj) != names: raise ContractError(code)
 
 
 def _sha(value: str, code: str) -> None:
@@ -96,9 +96,10 @@ def _sha(value: str, code: str) -> None:
 
 def check_work(work: JsonDict) -> None:
     _fields(work, {'schema','work_unit','node_id','captured_at_utc','stage','intent','task_sha256','plan_sha256'}, 'WORK_FIELDS_INVALID')
-    if work['schema'] != 'MAESTRO_PREP_WORK_V1' or work['stage'] not in {'PLAN','EXECUTE','PUBLISH','CLOSE'}:
+    if (work['schema'] != 'MAESTRO_PREP_WORK_V1' or not isinstance(work['stage'], str)
+            or work['stage'] not in {'PLAN','EXECUTE','PUBLISH','CLOSE'}):
         raise ContractError('WORK_SCHEMA_OR_STAGE_INVALID')
-    if work['intent'] not in {'NEW_PLAN','REPLAN','REUSE_PLAN','READ_ONLY'}:
+    if not isinstance(work['intent'], str) or work['intent'] not in {'NEW_PLAN','REPLAN','REUSE_PLAN','READ_ONLY'}:
         raise ContractError('WORK_INTENT_INVALID')
     if any(not isinstance(work[k], str) or not work[k].strip() or len(work[k]) > 160 for k in ('work_unit','node_id')):
         raise ContractError('WORK_ID_INVALID')
@@ -225,7 +226,7 @@ def decide(work: JsonDict, lock: JsonDict, o_signal: JsonDict, index_path: Path,
         return _result(work,None,['HOLD_O_MODULE_MISSING'],False)
     try:
         decision = o.evaluate_bound_signal(o_signal,str(index_path),str(evidence_root))
-    except (o.OPrepError, ValueError, OSError):
+    except (o.OPrepError, ValueError, OSError, TypeError, KeyError, RecursionError):
         return _result(work,None,['HOLD_O_BINDING_FAILED'],True)
     decision_issues = cast(list[JsonDict], decision['issues'])
     issues: list[str] = [cast(str, x['code']) for x in decision_issues]
