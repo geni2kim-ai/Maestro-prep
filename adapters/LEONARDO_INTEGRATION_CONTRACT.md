@@ -15,3 +15,19 @@ A `LEONARDO_ROUTE_CAPTURE_V1` wrapper describing `READY` is not a substitute for
 - The *same* output bytes must hash to `routing_output_sha256`. Any change since the preceding O-Prep check is HOLD.
 
 These are minimal normalized evidence fields, not a claim that the privately installed Leonardo emits this public adapter schema. A separately approved adapter must preserve the original output bytes, map state without widening readiness and bind the exact input/policy hashes. Current synthetic tests emulate this shape; genuine Leonardo node execution is NOT_RUN. SHA agreement remains evidence consistency, not independent provenance.
+
+## R1.5 O-Prep-to-router consistency extension
+
+In addition to the R1.4 raw `router_output` recheck, R1.5 binds the complete receipt
+index before O-Prep and checks the same index bytes after O-Prep. It then rereads
+and verifies the indexed `router_input`, `router_policy`, and `router_output`
+bytes against the original declared hashes and sizes before allowing the route
+semantics check. A producer must not change the validated task or policy bytes
+in the time between gates.
+
+The effective Leonardo R3 guard must have **all** of `blocks`, `block_codes`,
+`block_details` as empty lists; no permissive network/deployment/external action/
+credential/production settings; and exact true candidate-only, local-only,
+required tests, small-change-units and immutable-source flags. The final
+`next_action` must be `HANDOFF_TO_SELECTED_LOCAL_ROUTE`. Captured evidence or
+SHA equality is not independent provenance or execution authorization.

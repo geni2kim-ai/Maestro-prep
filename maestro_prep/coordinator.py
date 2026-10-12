@@ -247,7 +247,8 @@ def _astra_binding(work: JsonDict, lock: JsonDict, root: Path, skill_path: Path 
     return issues
 
 
-def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path, route_rel: str | None) -> list[str]:
+def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path, route_rel: str | None,
+                   *, index_sha256_before_o: str | None = None) -> list[str]:
     if not route_rel: return ['HOLD_LEONARDO_ROUTE_CAPTURE_MISSING']
     receipt = _json_bytes(_relative_file(root, route_rel), 'LEONARDO_RECEIPT_JSON_INVALID')
     required = {'schema','work_unit','node_id','router_version','task_sha256','policy_sha256',
@@ -260,6 +261,11 @@ def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path,
         return ['HOLD_LEONARDO_NOT_READY']
     if _timezone(receipt['captured_at_utc']) != _timezone(work['captured_at_utc']):
         return ['HOLD_LEONARDO_SNAPSHOT_MISMATCH']
+    # Bind the entire receipt index across the O-Prep -> Leonardo boundary.
+    # An index replaced after O-Prep can silently remap otherwise valid roles.
+    if index_sha256_before_o is not None:
+        if _is_link(index_path) or _hash(_relative_file(root, index_path.absolute().relative_to(root.absolute()).as_posix(), limit=131072)) != index_sha256_before_o:
+            return ['HOLD_O_INDEX_CHANGED_AFTER_GATE']
     idx = read_json(index_path)
     if not isinstance(idx.get('receipts'),list):return ['HOLD_O_INDEX_INVALID']
     rows: dict[str, JsonDict] = {}
@@ -273,16 +279,19 @@ def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path,
         ('router_output', receipt['routing_output_sha256'], None)]:
         if role not in rows or rows[role].get('sha256') != captured or (expected is not None and captured != expected):
             return ['HOLD_LEONARDO_ARTIFACT_PIN_MISMATCH']
-    # An index SHA confirms bytes, *not* that a producer's separate READY
-    # capture agrees with those bytes. Bind the actual recorded route contract.
-    # Re-read after the O-Prep gate to detect a changed artifact between gates.
-    route_row = rows['router_output']
-    route_path = route_row.get('path')
-    if not isinstance(route_path, str):
-        return ['HOLD_LEONARDO_ARTIFACT_PIN_MISMATCH']
-    route_bytes = _relative_file(root, route_path, limit=2*1024*1024)
-    if _hash(route_bytes) != receipt['routing_output_sha256']:
-        return ['HOLD_LEONARDO_ARTIFACT_BYTES_CHANGED']
+    # Reread ALL mandatory router roles after the O gate. Previously the raw
+    # output alone was rehashed, while task/policy bytes could change unseen.
+    final_bytes: dict[str, bytes] = {}
+    for role in ('router_input', 'router_policy', 'router_output'):
+        row = rows[role]
+        if not isinstance(row.get('path'), str):
+            return ['HOLD_LEONARDO_ARTIFACT_PIN_MISMATCH']
+        payload = _relative_file(root, row['path'], limit=2*1024*1024)
+        if (type(row.get('size_bytes')) is not int or len(payload) != row['size_bytes']
+                or _hash(payload) != row['sha256']):
+            return ['HOLD_LEONARDO_ARTIFACT_BYTES_CHANGED']
+        final_bytes[role] = payload
+    route_bytes = final_bytes['router_output']
     route = _json_bytes(route_bytes, 'LEONARDO_ROUTING_OUTPUT_INVALID')
     # Accept only a captured *local candidate* route, never a blocked/held
     # Leonardo contract falsely described as READY in the adapter receipt.
@@ -297,8 +306,22 @@ def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path,
             or bindings.get('policy_sha256') != receipt['policy_sha256']):
         return ['HOLD_LEONARDO_RAW_ROUTE_BINDING']
     guard = route.get('guard')
-    if not isinstance(guard, dict) or not isinstance(guard.get('blocks'), list) or guard['blocks']:
+    if not isinstance(guard, dict):
         return ['HOLD_LEONARDO_RAW_ROUTE_NOT_READY']
+    # These fields are part of Leonardo R3's guarded local-only contract.
+    # Inconsistent block channels or relaxed effective policy must never be
+    # accepted merely because guard.blocks was cleared by a producer.
+    if (route.get('next_action') != 'HANDOFF_TO_SELECTED_LOCAL_ROUTE'
+            or any(not isinstance(guard.get(key), list) or guard[key]
+                   for key in ('blocks', 'block_codes', 'block_details'))):
+        return ['HOLD_LEONARDO_RAW_ROUTE_NOT_READY']
+    if (any(guard.get(key) is not True for key in
+            ('candidate_only', 'local_only', 'tests_required',
+             'small_change_units_required', 'source_originals_immutable'))
+            or any(guard.get(key) != 'FORBIDDEN' for key in
+                   ('network', 'deployment', 'external_actions',
+                    'credential_access', 'production_mutation'))):
+        return ['HOLD_LEONARDO_RAW_POLICY_RELAXED']
     return []
 
 
@@ -312,6 +335,14 @@ def decide(work: JsonDict, lock: JsonDict, o_signal: JsonDict, index_path: Path,
     if (work['work_unit'],work['node_id'],work['stage'],_timezone(work['captured_at_utc'])) != (
             o_signal.get('work_unit'),o_signal.get('node_id'),o_signal.get('stage'),_timezone(cast(str, o_signal.get('captured_at_utc')))):
         raise ContractError('O_SIGNAL_WORK_BINDING_MISMATCH')
+    # Snapshot the exact index bytes before O-Prep validates them. This is a
+    # same-process consistency check, not a durable producer signature.
+    try:
+        index_before_o = (_hash(index_path.read_bytes())
+                          if not _is_link(index_path) and index_path.is_file()
+                          and index_path.stat().st_size <= 131072 else None)
+    except OSError:
+        index_before_o = None
     try:
         o = vendor_module()
     except Exception:
@@ -325,7 +356,11 @@ def decide(work: JsonDict, lock: JsonDict, o_signal: JsonDict, index_path: Path,
         if decision.get('evidence_binding', {}).get('status') != 'LOCAL_BYTES_VERIFIED_ONLY':
             return _result(work, decision, issues + ['HOLD_O_BINDING_FAILED'], True)
         try:
-            issues += _route_binding(work, lock, evidence_root, index_path, leonardo_route_rel)
+            if index_before_o is None:
+                issues.append('HOLD_O_INDEX_CHANGED_AFTER_GATE')
+            else:
+                issues += _route_binding(work, lock, evidence_root, index_path,
+                                         leonardo_route_rel, index_sha256_before_o=index_before_o)
             issues += _astra_binding(work, lock, evidence_root, astra_skill_path, astra_plan_receipt_rel)
         except ContractError as exc:
             issues.append(str(exc))
