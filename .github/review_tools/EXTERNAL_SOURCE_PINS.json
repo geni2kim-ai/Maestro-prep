@@ -1,0 +1,49 @@
+{
+  "schema": "MAESTRO_PREP_EXTERNAL_REVIEW_PINS_V1",
+  "leonardo": {
+    "repo": "geni2kim-ai/Leonardo",
+    "stable_main_sha": "a4e0bc631d1033e8ba25a0a3e7b1457ca3d6a0d7",
+    "latest_examined_candidate_sha": "80bb6891e772feb506a79dfe2c3beac2b5ae1dcc",
+    "candidate_branch": "candidate/leonardo-r230-excluded-import-guard-20261012",
+    "version": "R2.30 candidate",
+    "promoted_to_mandatory_runtime": false,
+    "reason": "Draft PR #15; observed CI checks failed; existing R3 read-only contract remains the optional route format",
+    "live_execution": "NOT_RUN"
+  },
+  "codediff": {
+    "repo": "geni2kim-ai/PR-with-codediff-finder",
+    "source_commit": "69a49faa35b56d48e9e3067e5f484b443735df67",
+    "version": "2.5",
+    "mode": "SHADOW",
+    "trusted_textdiff_sensor": false,
+    "independent_review": "NOT_RUN",
+    "upstream_files": [
+      {
+        "source": "tools/policy_engine.py",
+        "dest": ".github/review_tools/codediff_v25/policy_engine.py",
+        "source_git_blob": "b1466919d765d0b905ba1ba4447efddf87099efb",
+        "size": 9735
+      },
+      {
+        "source": "policy/protected-paths.yml",
+        "dest": ".github/review_tools/codediff_v25/protected-paths.yml",
+        "source_git_blob": "9abc44dd8d390fc6cb9f6c11d0224e779d6362bb",
+        "size": 1061
+      },
+      {
+        "source": "policy/escalation-policy.yml",
+        "dest": ".github/review_tools/codediff_v25/escalation-policy.yml",
+        "source_git_blob": "85f6026a41d83490dc267ead5bfc8a170f881377",
+        "size": 903
+      },
+      {
+        "source": "policy/sensor-policy.yml",
+        "dest": ".github/review_tools/codediff_v25/sensor-policy.yml",
+        "source_git_blob": "6f79fd4ec7e5b9f0947cb4cf086ab26c7f4c3640",
+        "size": 1161
+      }
+    ]
+  },
+  "authority": "NONE",
+  "candidate_only": true
+}
