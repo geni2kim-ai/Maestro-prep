@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Non-authoritative PR-with-codediff-finder v2.5 policy SHADOW.
+
+Authentic upstream policy engine is vendored with source blob pins. This script
+uses degraded Git change inventory; it does NOT run trusted TextDiff, L1/L2,
+Adversarial workers, Leonardo models, or a human approval step.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+VENDOR = ROOT / ".github" / "review_tools" / "codediff_v25"
+PIN_PATH = ROOT / ".github" / "review_tools" / "EXTERNAL_SOURCE_PINS.json"
+OVERLAY = {
+    "governance_paths": [".github/review_tools/**", ".github/scripts/codediff_shadow.py"],
+    "human_floor_paths": [
+        "/maestro_prep/coordinator.py", "/maestro_prep/cli.py",
+        "/components/o_prep_v0_3/**", "/.github/review_tools/**",
+        "/.github/workflows/**", "/tools/verify_package.py",
+        "/MANIFEST.json", "/SHA256SUMS.txt", "/adapters/**",
+    ],
+    "adversarial_floor_paths": [
+        "/maestro_prep/**", "/components/o_prep_v0_3/**",
+        "/.github/review_tools/**", "/tests/test_maestro.py",
+    ],
+    "supply_chain_files": [],
+}
+SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def git(repo: Path, *args: str) -> str:
+    env = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR", "HOME",
+        "USERPROFILE", "TEMP", "TMP", "TMPDIR") if k in os.environ}
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+               GIT_TERMINAL_PROMPT="0")
+    result = subprocess.run(["git", "-C", str(repo), *args], cwd=repo,
+                            env=env, capture_output=True, check=False,
+                            timeout=40)
+    if result.returncode:
+        raise ValueError("GIT_DATA_UNAVAILABLE")
+    return result.stdout.decode("utf-8", "surrogateescape")
+
+
+def git_status(repo: Path, base: str, head: str) -> list[str]:
+    # Git's NUL format is safe for renames and filenames with whitespace.
+    raw = git(repo, "diff", "--name-status", "-z", "-M", base, head)
+    tokens = raw.split("\0")
+    if tokens[-1] == "":
+        tokens.pop()
+    changed: set[str] = set()
+    i = 0
+    while i < len(tokens):
+        action = tokens[i]
+        i += 1
+        if not action or action[0] not in "ACDMRTUX":
+            raise ValueError("UNKNOWN_DIFF_STATUS")
+        if action[0] in "RC":
+            if i + 1 >= len(tokens):
+                raise ValueError("INVALID_RENAME_RECORD")
+            changed.add(tokens[i])
+            changed.add(tokens[i + 1])
+            i += 2
+        else:
+            if i >= len(tokens):
+                raise ValueError("INVALID_DIFF_RECORD")
+            changed.add(tokens[i])
+            i += 1
+    return sorted(changed)
+
+
+def object_id(data: bytes) -> str:
+    # Git SHA-1 source-object identity, not an authentication signature.
+    prefix = ("blob " + str(len(data)) + "\0").encode("ascii")
+    return hashlib.sha1(prefix + data).hexdigest()
+
+
+def trusted_source_snapshot() -> tuple[dict[str, Any], Any]:
+    pins = json.loads(PIN_PATH.read_text(encoding="utf-8"))
+    if (pins["codediff"]["version"] != "2.5"
+            or pins["codediff"]["mode"] != "SHADOW"
+            or pins["codediff"]["trusted_textdiff_sensor"] is not False
+            or pins["leonardo"]["promoted_to_mandatory_runtime"] is not False):
+        raise ValueError("UNAUTHORIZED_REVIEW_OR_LEONARDO_PROMOTION")
+    paths = pins["codediff"]["upstream_files"]
+    if len(paths) != 4:
+        raise ValueError("UPSTREAM_PINSET_INVALID")
+    for item in paths:
+        target = ROOT / item["dest"]
+        if not target.is_file() or target.is_symlink():
+            raise ValueError("REVIEW_VENDOR_SOURCE_MISSING")
+        data = target.read_bytes()
+        if object_id(data) != item["source_git_blob"]:
+            raise ValueError("UPSTREAM_SOURCE_PIN_MISMATCH")
+    path = VENDOR / "policy_engine.py"
+    spec = importlib.util.spec_from_file_location("_pinned_pr_codediff_policy_engine_v25", path)
+    if spec is None or spec.loader is None:
+        raise ValueError("CODEDIFF_POLICY_IMPORT_UNAVAILABLE")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return pins, module
+
+
+def analyze(repo: Path, base: str, head: str) -> dict[str, Any]:
+    if not SHA.fullmatch(base) or not SHA.fullmatch(head):
+        raise ValueError("UNPINNED_GIT_REFERENCE")
+    if git(repo, "rev-parse", "HEAD").strip() != head:
+        raise ValueError("STALE_HEAD")
+    if git(repo, "merge-base", base, head).strip() != base:
+        raise ValueError("BASE_NOT_ANCESTOR")
+    pins, engine = trusted_source_snapshot()
+    paths = git_status(repo, base, head)
+    if not paths:
+        raise ValueError("EMPTY_DIFF")
+    # Real upstream policy_engine.run: classify paths + derive escalation.
+    protected = engine.load_yaml(VENDOR / "protected-paths.yml")
+    escalation = engine.load_yaml(VENDOR / "escalation-policy.yml")
+    sensor = engine.load_yaml(VENDOR / "sensor-policy.yml")
+    merged = {k: list(protected.get(k, [])) + OVERLAY.get(k, [])
+              for k in OVERLAY}
+    path_hits = engine.classify_paths(paths, merged)
+    model = {
+        "reversibility": "MODERATE", "blast_radius": "MULTI_SERVICE",
+        "data_sensitivity": "NONE", "security_surface": "HIGH",
+        "availability_criticality": "HIGH",
+    }
+    signals = {
+        "sensor_runtime_untrusted": True, "sensor_approximate": True,
+        "reviewer_confidence": "low", "novel_failure_family": True,
+        "reviewer_policy_tampering": bool(path_hits["governance"]),
+    }
+    risk = engine.derive_risk(model, path_hits)
+    required, reasons = engine.derive_required_level(
+        model, path_hits, signals, escalation_cfg=escalation, sensor_cfg=sensor)
+    # Official required-level function is the risk policy; missing reviewer
+    # executions are never rewritten as PASS (regardless of required level).
+    return {
+        "schema": "MAESTRO_CODEDIFF_SHADOW_V1",
+        "candidate_only": True, "review_mode": "SHADOW",
+        "sensor_mode": "DEGRADED_GIT_INVENTORY", "trusted_for_gate": False,
+        "degradation_reasons": ["TRUSTED_TEXTDIFF_SENSOR_NOT_EXECUTED"],
+        "code_diff_source": pins["codediff"]["repo"],
+        "code_diff_source_commit": pins["codediff"]["source_commit"],
+        "code_diff_policy_engine_actual": "EXECUTED",
+        "code_diff_textdiff_adapter": "NOT_RUN",
+        "leonardo_candidate_sha": pins["leonardo"]["latest_examined_candidate_sha"],
+        "leonardo_candidate_ci": "FAILED_NOT_PROMOTED",
+        "leonardo_actual_router": "NOT_RUN",
+        "base_sha": base, "head_sha": head, "changed_paths": paths,
+        "risk_model": model, "path_hits": path_hits, "risk": risk,
+        "required_level": required, "required_reasons": reasons,
+        "achieved_level": "SENSOR_ONLY", "analysis_status": "INSUFFICIENT_EVIDENCE",
+        "gate_conclusion": "action_required",
+        "independent_redagent": "NOT_RUN",
+        "human_review": "NOT_RUN",
+        "authority_effect": "NONE",
+        "next_action": "OBTAIN_INDEPENDENT_REVIEW_BEFORE_MERGE",
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument("--base", required=True)
+    parser.add_argument("--head", required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    ns = parser.parse_args(argv)
+    try:
+        path = ns.out.absolute()
+        root = ns.repo.resolve(strict=True)
+        if path.exists() or not path.parent.is_dir() or path.is_relative_to(root):
+            raise ValueError("REVIEW_OUTPUT_INVALID")
+        report = analyze(root, ns.base, ns.head)
+        with path.open("x", encoding="utf-8") as handle:
+            json.dump(report, handle, sort_keys=True, indent=2)
+            handle.write("\n")
+        print(json.dumps({"sensor": "CODEDIFF_V25_POLICY_EXECUTED",
+                          "mode": report["sensor_mode"],
+                          "required_level": report["required_level"],
+                          "gate_conclusion": report["gate_conclusion"],
+                          "head_sha": ns.head, "paths": len(report["changed_paths"])}))
+        return 0
+    except (OSError, ValueError, KeyError, ImportError) as exc:
+        reason = str(exc) if isinstance(exc, ValueError) and re.fullmatch(
+            r"[A-Z][A-Z0-9_]{1,79}", str(exc)) else "REVIEW_INTEGRATION_ERROR"
+        print(json.dumps({"status": "BLOCKED", "code": reason,
+                          "trusted_for_gate": False, "authority_effect": "NONE"}))
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
