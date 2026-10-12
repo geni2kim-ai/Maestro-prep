@@ -165,8 +165,8 @@
     },
     {
       "path": "maestro_prep/coordinator.py",
-      "bytes": 15626,
-      "sha256": "c73cd48590df3c0245eb8b1ac677c225322e6c36a955b875273e2484460cfac7"
+      "bytes": 17318,
+      "sha256": "b01ae403699722edd9a01a9b6766c21eab9cf39820c772762cff2d5b1a989ed2"
     },
     {
       "path": "schemas/lock.schema.json",
@@ -180,8 +180,8 @@
     },
     {
       "path": "tests/test_maestro.py",
-      "bytes": 21176,
-      "sha256": "66af96ef745a41a0fb67c58fa02d6bdbf999ce6e0bc25e9c38a9c684aee64e72"
+      "bytes": 23143,
+      "sha256": "ece1e5ae17707a89ca64e04a12d161263e96cb8f4476e5ac490324bd31f286e0"
     },
     {
       "path": "tests/test_public_privacy_check.py",

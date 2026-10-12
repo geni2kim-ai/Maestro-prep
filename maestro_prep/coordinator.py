@@ -6,12 +6,12 @@ producer-authored. Passing is never permission to mutate, publish or deploy.
 """
 from __future__ import annotations
 
+import builtins
 import hashlib
-import importlib
 import json
 import re
 import stat
-import sys
+from types import ModuleType
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn, Protocol, cast
@@ -161,21 +161,62 @@ def _relative_file(root: Path, rel: str, limit: int = 1024*1024) -> bytes:
     return node.read_bytes()
 
 
+def _verified_vendor_bytes(manifest: JsonDict, name: str) -> tuple[Path, bytes]:
+    """Read a source snapshot once; execute only the exact bytes just hashed."""
+    pins = manifest.get('files')
+    if not isinstance(pins, dict) or name not in pins:
+        raise ContractError('O_MODULE_PIN_INCOMPLETE')
+    digest = pins[name]
+    _sha(digest, 'O_MODULE_PIN_INVALID')
+    fp = BASE / 'components' / 'o_prep_v0_3' / name
+    if not fp.is_file() or _is_link(fp):
+        raise ContractError('O_MODULE_HASH_MISMATCH')
+    data = fp.read_bytes()
+    if _hash(data) != digest:
+        raise ContractError('O_MODULE_HASH_MISMATCH')
+    return fp, data
+
+
+def _exec_pinned(name: str, path: Path, data: bytes, *,
+                 bindings: ModuleType | None = None) -> ModuleType:
+    """Run pinned code without importing preloaded names from sys.modules.
+
+    Source and dependency bytes are independently hashed first. This is *not*
+    a Python sandbox: a compromised interpreter/process can still tamper.
+    """
+    module = ModuleType(name)
+    module.__file__ = str(path)
+    module.__package__ = ''
+    if bindings is not None:
+        importer = builtins.__import__
+        def pinned_import(target: str, globals: JsonDict | None = None,
+                          locals: JsonDict | None = None, fromlist: tuple[str, ...] = (),
+                          level: int = 0) -> Any:
+            if target == 'evidence_bindings' and level == 0:
+                return bindings
+            return importer(target, globals, locals, fromlist, level)
+        safe_builtins = vars(builtins).copy()
+        safe_builtins['__import__'] = pinned_import
+        module.__dict__['__builtins__'] = safe_builtins
+    exec(compile(data, str(path), 'exec'), module.__dict__)
+    return module
+
+
 def vendor_module() -> OPrepModule:
-    """Verify O-Prep exact copied source against this package's pinned manifest."""
+    """Load fresh, directly from both hash-verified source snapshots.
+
+    In particular, never trust sys.modules['o_prep'] or a cached
+    sys.modules['evidence_bindings'] with a spoofed __file__ attribute.
+    """
     manifest = read_json(BASE / 'components' / 'o_prep_v0_3' / 'SOURCE_PIN.json')
     if manifest.get('component') != 'o-prep' or manifest.get('version') != '0.3.0-prep':
         raise ContractError('O_MODULE_VERSION_MISMATCH')
-    for name in ('src/o_prep.py', 'src/evidence_bindings.py'):
-        if name not in manifest.get('files', {}): raise ContractError('O_MODULE_PIN_INCOMPLETE')
-        fp = BASE / 'components' / 'o_prep_v0_3' / name
-        if not fp.is_file() or _is_link(fp) or _hash(fp.read_bytes()) != manifest['files'][name]:
-            raise ContractError('O_MODULE_HASH_MISMATCH')
-    if str(VENDOR) not in sys.path: sys.path.insert(0,str(VENDOR))
-    module = importlib.import_module('o_prep')
-    module_file = getattr(module, '__file__', None)
-    if not isinstance(module_file, str) or Path(module_file).resolve() != (VENDOR/'o_prep.py').resolve():
-        raise ContractError('O_MODULE_IMPORT_PATH_MISMATCH')
+    bind_path, bind_bytes = _verified_vendor_bytes(manifest, 'src/evidence_bindings.py')
+    source_path, source_bytes = _verified_vendor_bytes(manifest, 'src/o_prep.py')
+    bindings = _exec_pinned('_maestro_pinned_evidence_bindings', bind_path, bind_bytes)
+    module = _exec_pinned('_maestro_pinned_o_prep', source_path, source_bytes, bindings=bindings)
+    if getattr(module, 'VERSION', None) != '0.3.0-prep':
+        raise ContractError('O_MODULE_VERSION_MISMATCH')
     return cast(OPrepModule, module)
 
 

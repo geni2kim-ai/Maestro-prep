@@ -5,6 +5,7 @@ from io import StringIO
 import hashlib
 import json
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -315,6 +316,45 @@ class CoordinatorTests(Fixture):
         self.assertEqual(rc,0)
         self.assertTrue(out.getvalue().isascii())
         self.assertEqual(json.loads(out.getvalue())['work_unit'],chr(0xD800))
+
+    def test_sys_modules_o_prep_spoof_cannot_bypass_required_gate(self):
+        class SpoofedOPrep:
+            __file__ = str(coordinator.VENDOR / 'o_prep.py')
+            VERSION = '0.3.0-prep'
+            OPrepError = ValueError
+            @staticmethod
+            def evaluate_bound_signal(*_args):
+                return {'issues': [], 'next_action': 'ADVANCE_CANDIDATE',
+                        'evidence_binding': {'status': 'LOCAL_BYTES_VERIFIED_ONLY'}}
+        self.signal['evidence']['manifest_verified'] = False
+        with patch.dict(sys.modules, {'o_prep': SpoofedOPrep()}):
+            result = self.invoke()
+        self.assertEqual(result['next_action'], 'HOLD_SOURCE')
+        self.assertIn('MANIFEST_UNVERIFIED', result['issue_codes'])
+
+    def test_sys_modules_evidence_bindings_spoof_cannot_bypass_gate(self):
+        class SpoofedBindings:
+            __file__ = str(coordinator.VENDOR / 'evidence_bindings.py')
+            class BindingError(ValueError):
+                pass
+            @staticmethod
+            def verify_local_bindings(*_args):
+                return {'status':'LOCAL_BYTES_VERIFIED_ONLY','issues':[]}
+            @staticmethod
+            def is_link(*_args):
+                return False
+        (self.root/'receipts/router_output.bin').write_bytes(b'tampered')
+        with patch.dict(sys.modules, {'evidence_bindings': SpoofedBindings()}):
+            result = self.invoke()
+        self.assertEqual(result['next_action'], 'HOLD_SOURCE')
+        self.assertIn('RECEIPT_BYTES_MISMATCH_ROUTER_OUTPUT', result['issue_codes'])
+
+    def test_pinned_loading_does_not_change_sys_modules(self):
+        before = (sys.modules.get('o_prep'), sys.modules.get('evidence_bindings'))
+        result = self.invoke()
+        after = (sys.modules.get('o_prep'), sys.modules.get('evidence_bindings'))
+        self.assertEqual(result['next_action'], 'BOUND_CANDIDATE_CHECKS_PASSED')
+        self.assertEqual(before, after)
 
 class JunctionGuardTests(Fixture):
     """NTFS junctions are reparse points that Path.is_symlink() does not report."""
