@@ -32,6 +32,8 @@ class OPrepModule(Protocol):
         self, signal: JsonDict, receipt_index_path: str, evidence_root: str
     ) -> JsonDict: ...
 
+    def audit_transport_bundle(self, zip_path: str, peer_audit: str | None = None) -> JsonDict: ...
+
 
 class ContractError(ValueError):
     """Non-sensitive failure code; never include node-local paths or data."""
@@ -68,7 +70,8 @@ def _json_bytes(data: bytes, code: str) -> JsonDict:
         elif char in '}]':
             depth -= 1
     try: obj = json.loads(source, object_pairs_hook=unique, parse_constant=bad_constant)
-    except (json.JSONDecodeError, RecursionError) as exc: raise ContractError(code) from exc
+    except ContractError: raise
+    except (json.JSONDecodeError, ValueError, RecursionError) as exc: raise ContractError(code) from exc
     if not isinstance(obj, dict): raise ContractError(code)
     return cast(JsonDict, obj)
 
@@ -218,7 +221,11 @@ def _route_binding(work: JsonDict, lock: JsonDict, root: Path, index_path: Path,
         return ['HOLD_LEONARDO_SNAPSHOT_MISMATCH']
     idx = read_json(index_path)
     if not isinstance(idx.get('receipts'),list):return ['HOLD_O_INDEX_INVALID']
-    rows = {r.get('role'):r for r in idx['receipts'] if isinstance(r,dict)}
+    rows: dict[str, JsonDict] = {}
+    for row in idx['receipts']:
+        if not isinstance(row, dict) or not isinstance(row.get('role'), str):
+            return ['HOLD_O_INDEX_INVALID']
+        rows[row['role']] = row
     for role, captured, expected in [
         ('router_input',receipt['task_sha256'],work['task_sha256']),
         ('router_policy',receipt['policy_sha256'],lock['leonardo']['policy_sha256']),
@@ -240,26 +247,26 @@ def decide(work: JsonDict, lock: JsonDict, o_signal: JsonDict, index_path: Path,
         raise ContractError('O_SIGNAL_WORK_BINDING_MISMATCH')
     try:
         o = vendor_module()
-    except (ContractError, ImportError, OSError):
-        return _result(work,None,['HOLD_O_MODULE_MISSING'],False)
+    except Exception:
+        return _result(work, None, ['HOLD_O_MODULE_MISSING'], False)
     try:
-        decision = o.evaluate_bound_signal(o_signal,str(index_path),str(evidence_root))
-    except (o.OPrepError, ValueError, OSError, TypeError, KeyError, RecursionError):
-        return _result(work,None,['HOLD_O_BINDING_FAILED'],True)
-    decision_issues = cast(list[JsonDict], decision['issues'])
-    issues: list[str] = [cast(str, x['code']) for x in decision_issues]
-    if decision['next_action'] != 'ADVANCE_CANDIDATE':
-        # Do not use producer-written booleans to bypass byte checks.
-        return _result(work,decision,issues,True)
-    if decision.get('evidence_binding',{}).get('status') != 'LOCAL_BYTES_VERIFIED_ONLY':
-        return _result(work,decision,issues+['HOLD_O_BINDING_FAILED'],True)
-    try:
-        issues += _route_binding(work,lock,evidence_root,index_path,leonardo_route_rel)
-        issues += _astra_binding(work,lock,evidence_root,astra_skill_path,astra_plan_receipt_rel)
-    except ContractError as exc:
-        issues.append(str(exc))
-    return _result(work,decision,issues,True)
-
+        decision = o.evaluate_bound_signal(o_signal, str(index_path), str(evidence_root))
+        decision_issues = cast(list[JsonDict], decision['issues'])
+        issues: list[str] = [cast(str, x['code']) for x in decision_issues]
+        if decision['next_action'] != 'ADVANCE_CANDIDATE':
+            return _result(work, decision, issues, True)
+        if decision.get('evidence_binding', {}).get('status') != 'LOCAL_BYTES_VERIFIED_ONLY':
+            return _result(work, decision, issues + ['HOLD_O_BINDING_FAILED'], True)
+        try:
+            issues += _route_binding(work, lock, evidence_root, index_path, leonardo_route_rel)
+            issues += _astra_binding(work, lock, evidence_root, astra_skill_path, astra_plan_receipt_rel)
+        except ContractError as exc:
+            issues.append(str(exc))
+        return _result(work, decision, issues, True)
+    except Exception:
+        # Untrusted external evaluation and malformed result shapes must fail closed.
+        # Do not catch BaseException.
+        return _result(work, None, ['HOLD_O_BINDING_FAILED'], True)
 
 def _result(work: JsonDict, o_decision: JsonDict | None, issues: list[str], o_invoked: bool) -> JsonDict:
     # O-Prep stop/hold is never overridden by Astra READY or a Leonardo branch.

@@ -2,11 +2,13 @@
 from __future__ import annotations
 import argparse
 import json
+import re
+from collections.abc import Sequence
 from pathlib import Path
 from .coordinator import ContractError, read_json, decide, vendor_module, verify_generic_file
 
 
-def main(argv=None):
+def main(argv: Sequence[str] | None = None) -> int:
     p=argparse.ArgumentParser(prog='maestro-prep',description='Candidate-only orchestration. No runtime authority.')
     sub=p.add_subparsers(dest='cmd',required=True)
     d=sub.add_parser('decide',help='evaluate a locally byte-bound work unit')
@@ -29,13 +31,15 @@ def main(argv=None):
         elif args.cmd=='audit-transport': out=vendor_module().audit_transport_bundle(args.zip)
         else:
             vendor_module();out={'schema':'MAESTRO_COMPONENT_CHECK_V1','o_prep_v03_pinned':True,'astra':'EXTERNAL_NOT_RUN','leonardo':'EXTERNAL_NOT_RUN'}
-    except (ContractError, ValueError, OSError) as exc:
-        # Errors should be stable, non-sensitive codes; no internal path disclosure.
-        out={'schema':'MAESTRO_ERROR_V1','status':'HOLD','issue_code':str(exc).split(':')[0]}
-    except (TypeError, KeyError, RecursionError):
-        # Untrusted nested JSON shapes must not leak exception details or crash the CLI.
+    except ContractError as exc:
+        code = str(exc)
+        if re.fullmatch(r'[A-Z][A-Z0-9_]{0,79}', code) is None:
+            code = 'CONTRACT_INVALID'
+        out={'schema':'MAESTRO_ERROR_V1','status':'HOLD','issue_code':code}
+    except Exception:
+        # Non-contract exception messages may expose private host paths.
         out={'schema':'MAESTRO_ERROR_V1','status':'HOLD','issue_code':'MALFORMED_INPUT'}
-    print(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True))
+    print(json.dumps(out,ensure_ascii=True,indent=2,sort_keys=True))
     if args.cmd=='audit-transport': return 0 if out.get('manifest_verified') and not out.get('findings') else 2
     return 0 if (out.get('next_action') in {'READ_ONLY_EVIDENCE_MATCH','BOUND_CANDIDATE_CHECKS_PASSED'} or
                  args.cmd=='component-check' and out.get('o_prep_v03_pinned')) else 2
