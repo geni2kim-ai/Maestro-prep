@@ -28,8 +28,17 @@ class CIAccountingTests(unittest.TestCase):
         item = self.simulate("public_component_tests", "component", "Ran 69 tests\nOK (skipped=5)\n")
         self.assertFalse(item["passed"])
     def test_unexplained_public_component_skip_is_rejected(self):
-        item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK (skipped=0)\n")
+        with patch.object(CI.importlib.util, "find_spec", return_value=None):
+            item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK (skipped=0)\n")
         self.assertFalse(item["passed"])
+    def test_installed_optional_schema_runs_all_without_skips(self):
+        with patch.object(CI.importlib.util, "find_spec", return_value=object()):
+            item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK\n")
+        self.assertTrue(item["passed"])
+    def test_missing_optional_schema_requires_five_skips(self):
+        with patch.object(CI.importlib.util, "find_spec", return_value=None):
+            item = self.simulate("public_component_tests", "component", "Ran 70 tests\nOK (skipped=5)\n")
+        self.assertTrue(item["passed"])
 
 if __name__ == "__main__":
     unittest.main()
