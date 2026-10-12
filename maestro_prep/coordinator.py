@@ -49,8 +49,26 @@ def _json_bytes(data: bytes, code: str) -> JsonDict:
             out[k] = v
         return out
     def bad_constant(_value: str) -> NoReturn: raise ContractError('NONFINITE_JSON_NUMBER')
-    try: obj = json.loads(data.decode('utf-8'), object_pairs_hook=unique, parse_constant=bad_constant)
-    except (UnicodeError, json.JSONDecodeError, RecursionError) as exc: raise ContractError(code) from exc
+    try: source = data.decode('utf-8')
+    except UnicodeError as exc: raise ContractError(code) from exc
+    # Reject depth bombs consistently across Python parser versions. Brackets inside
+    # quoted JSON strings (including escaped quotes) must not count as containers.
+    depth = 0
+    quoted = False
+    escaped = False
+    for char in source:
+        if quoted:
+            if escaped: escaped = False
+            elif char == '\\': escaped = True
+            elif char == '"': quoted = False
+        elif char == '"': quoted = True
+        elif char in '{[':
+            depth += 1
+            if depth > 256: raise ContractError('JSON_NESTING_LIMIT')
+        elif char in '}]':
+            depth -= 1
+    try: obj = json.loads(source, object_pairs_hook=unique, parse_constant=bad_constant)
+    except (json.JSONDecodeError, RecursionError) as exc: raise ContractError(code) from exc
     if not isinstance(obj, dict): raise ContractError(code)
     return cast(JsonDict, obj)
 

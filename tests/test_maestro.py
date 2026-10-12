@@ -191,7 +191,12 @@ class CoordinatorTests(Fixture):
         f.write_text('{"x":' + '[' * 1200 + '0' + ']' * 1200 + '}')
         with self.assertRaises(ContractError) as ctx:
             read_json(f)
-        self.assertEqual(str(ctx.exception), 'INVALID_JSON_SOURCE')
+        self.assertEqual(str(ctx.exception), 'JSON_NESTING_LIMIT')
+
+    def test_depth_marker_in_json_string_is_not_counted(self):
+        f = self.tmp / 'bracket_string.json'
+        f.write_text(json.dumps({'x': '[' * 1200 + ']' * 1200}))
+        self.assertEqual(read_json(f)['x'], '[' * 1200 + ']' * 1200)
 
     def test_untrusted_vendor_type_error_fails_closed(self):
         with patch('maestro_prep.coordinator.vendor_module') as vendor:

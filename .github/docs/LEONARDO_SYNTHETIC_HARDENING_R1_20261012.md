@@ -9,7 +9,7 @@
 ## Findings and source-bound reproduction
 1. **F1 / Input-shape fail-closed gap** — in `check_work`, non-string JSON list/dict `stage` or `intent` reaches set membership, causing unhandled `TypeError`. Expected: `ContractError(WORK_SCHEMA_OR_STAGE_INVALID)` / `WORK_INTENT_INVALID`.
 2. **F2 / Nested-lock shape gap** — `_fields` calls `set(obj)` on untrusted `astra` / `leonardo` JSON; null and numeric entries raise `TypeError`. Expected: stable `ASTRA_LOCK_INVALID` / `LEONARDO_LOCK_INVALID`.
-3. **F3 / JSON nesting gap** — `json.loads` of syntactically deeply nested JSON can raise `RecursionError` outside the parse exception handler. Expected: `INVALID_JSON_SOURCE`.
+3. **F3 / JSON nesting gap** — `json.loads` accepts/rejects deeply nested JSON at different thresholds on Python 3.11 and 3.13. The candidate now imposes a cross-version explicit depth cap of 256 containers, returning `JSON_NESTING_LIMIT`; quoted brackets are excluded. The parser still converts unexpected recursion failures into `INVALID_JSON_SOURCE`.
 4. **F4 / External gate exception gap** — `decide` catches expected O-Prep failures but not malformed-input `TypeError`, `KeyError` or `RecursionError`. Expected: `HOLD_O_BINDING_FAILED`, never advance candidate or grant authority.
 5. **F5 / CLI recovery boundary** — malformed nested JSON/runtime failures should return sanitized `MALFORMED_INPUT` and exit 2 rather than traceback, without ever identifying private filesystem locations.
 
@@ -48,3 +48,8 @@ No packet execution, secrets, networking by coordinator, autonomous retries or u
 - Baseline and candidate must be compared separately. Treat any PR diff tool including `PR-with-codediff-finder` as a non-authoritative change sensor only.
 - Available validation: GitHub compare/PR diff and CI run after candidate commit. External PR-with-codediff-finder runtime: NOT_RUN in this session.
 - Document unresolved integration: actual Leonardo local router, independent RedAgent/host receipts, and external package signature verification all NOT_RUN.
+
+## R1.1 CI recheck record
+- GitHub workflow run 61 (38252912758), initial candidate d44f2a049742d96eb5d11547d2b8757932c4ce57: Ubuntu 3.11 PASS, Windows 3.11 PASS, Ubuntu 3.13 FAIL, Windows 3.13 FAIL.
+- Failure isolated to test `test_deeply_nested_json_returns_stable_hold_error`: Python 3.13 accepted 1,200 nested containers while Python 3.11 rejected it. Other checks passed (8/9 main CI cases on failing jobs).
+- R1.1 resolution: version-independent parser depth cap (256) plus quoted-brackets regression. This record is historical; new commit CI still needs observation.
