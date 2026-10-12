@@ -1,5 +1,7 @@
 """Synthetic-only cross-module, hostile-input, outage and isolation tests."""
 import copy
+from contextlib import redirect_stdout
+from io import StringIO
 import hashlib
 import json
 import stat
@@ -9,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from maestro_prep import coordinator
+from maestro_prep import coordinator, cli
 from maestro_prep.coordinator import (
     ContractError, check_work, check_lock, decide, read_json, vendor_module,verify_generic_file,
 )
@@ -205,6 +207,114 @@ class CoordinatorTests(Fixture):
             result = self.invoke()
         self.assertEqual(result['next_action'], 'HOLD_O_BINDING_FAILED')
         self.assertFalse(result['host_mutation_authorized'])
+
+
+    def test_vendor_unexpected_errors_always_hold(self):
+        for klass in (AttributeError, IndexError, KeyError, TypeError, RuntimeError, RecursionError):
+            with self.subTest(error=klass.__name__):
+                with patch('maestro_prep.coordinator.vendor_module') as mock:
+                    mock.return_value.evaluate_bound_signal.side_effect = klass('private-path')
+                    result = self.invoke()
+                self.assertEqual(result['next_action'], 'HOLD_O_BINDING_FAILED')
+                self.assertFalse(result['host_mutation_authorized'])
+
+    def test_vendor_malformed_response_holds(self):
+        with patch('maestro_prep.coordinator.vendor_module') as mock:
+            mock.return_value.evaluate_bound_signal.return_value = {'issues': None}
+            self.assertEqual(self.invoke()['next_action'], 'HOLD_O_BINDING_FAILED')
+
+    def test_vendor_import_unexpected_error_holds(self):
+        with patch('maestro_prep.coordinator.vendor_module', side_effect=RuntimeError('private')):
+            self.assertEqual(self.invoke()['next_action'], 'HOLD_O_MODULE_MISSING')
+
+    def test_router_receipt_unhashable_role_rejected(self):
+        data = read_json(self.index)
+        data['receipts'][0]['role'] = []
+        self.write_json('receipt_index.json', data)
+        result = coordinator._route_binding(self.work, self.lock, self.root, self.index, self.route_rel)
+        self.assertEqual(result, ['HOLD_O_INDEX_INVALID'])
+
+    def test_extended_malformed_lock_matrix(self):
+        for key in ('astra', 'leonardo'):
+            for invalid in ({}, {'bogus': 1}, 'not-a-map'):
+                with self.subTest(key=key, invalid=invalid):
+                    self.lock[key] = invalid
+                    with self.assertRaises(ContractError) as ctx:
+                        self.invoke()
+                    self.assertEqual(str(ctx.exception), 'ASTRA_LOCK_INVALID' if key == 'astra' else 'LEONARDO_LOCK_INVALID')
+                    self.setUp_lock_for_next_case(key)
+
+    def test_depth_256_257_mixed_boundary(self):
+        f = self.tmp / 'depth.json'
+        for n in (254, 255):
+            f.write_text('{"x":' + '['*n + '0' + ']'*n + '}')
+            self.assertIn('x', read_json(f))
+        f.write_text('{"x":' + '['*256 + '0' + ']'*256 + '}')
+        with self.assertRaises(ContractError) as ctx:
+            read_json(f)
+        self.assertEqual(str(ctx.exception), 'JSON_NESTING_LIMIT')
+        mixed = {'outer': [{'inner': [42]}]}
+        f.write_text(json.dumps(mixed))
+        self.assertEqual(read_json(f), mixed)
+
+    def test_escaped_brackets_quote_backslash_not_false_positive(self):
+        f = self.tmp / 'quoted.json'
+        item = {'text': ('literal [{()}] " quote and backslash ' + chr(92)) * 40}
+        f.write_text(json.dumps(item))
+        self.assertEqual(read_json(f), item)
+
+    def test_huge_integer_json_raises_stable_contract_code(self):
+        f = self.tmp / 'integer.json'
+        f.write_text('{"value":' + '9'*5000 + '}')
+        with self.assertRaises(ContractError) as ctx:
+            read_json(f)
+        self.assertEqual(str(ctx.exception), 'INVALID_JSON_SOURCE')
+
+    def test_cli_large_integer_safe_code_exit_2(self):
+        f = self.tmp / 'integer.json'
+        f.write_text('{"value":' + '9'*5000 + '}')
+        argv=['decide','--work',str(f),'--lock','x','--o-signal','x',
+              '--receipt-index','x','--evidence-root','x']
+        with redirect_stdout(StringIO()) as out:
+            rc=cli.main(argv)
+        self.assertEqual(rc,2)
+        self.assertEqual(json.loads(out.getvalue())['issue_code'], 'INVALID_JSON_SOURCE')
+        self.assertNotIn('Exceeds',out.getvalue())
+
+    def test_cli_unexpected_errors_are_redacted(self):
+        argv=['decide','--work','x','--lock','x','--o-signal','x',
+              '--receipt-index','x','--evidence-root','x']
+        for failure in (ValueError('SECRET:/path'), OSError('/secret/token'),
+                        AttributeError('private'), IndexError('private')):
+            with self.subTest(error=type(failure).__name__):
+                with patch('maestro_prep.cli.read_json',side_effect=failure), \
+                     redirect_stdout(StringIO()) as out:
+                    rc=cli.main(argv)
+                self.assertEqual(rc,2)
+                self.assertEqual(json.loads(out.getvalue())['issue_code'],'MALFORMED_INPUT')
+                self.assertNotIn('private',out.getvalue())
+                self.assertNotIn('secret',out.getvalue().lower())
+
+    def test_cli_contract_error_vocabulary_sanitized(self):
+        argv=['decide','--work','x','--lock','x','--o-signal','x',
+              '--receipt-index','x','--evidence-root','x']
+        with patch('maestro_prep.cli.read_json',side_effect=ContractError('PRIVATE: /secret')), \
+             redirect_stdout(StringIO()) as out:
+            rc=cli.main(argv)
+        self.assertEqual(rc,2)
+        self.assertEqual(json.loads(out.getvalue())['issue_code'],'CONTRACT_INVALID')
+
+    def test_cli_surrogate_escape_ascii_safe(self):
+        argv=['decide','--work','x','--lock','x','--o-signal','x',
+              '--receipt-index','x','--evidence-root','x']
+        payload={'next_action':'BOUND_CANDIDATE_CHECKS_PASSED','work_unit':chr(0xD800)}
+        with patch('maestro_prep.cli.read_json',return_value=self.work), \
+             patch('maestro_prep.cli.decide',return_value=payload), \
+             redirect_stdout(StringIO()) as out:
+            rc=cli.main(argv)
+        self.assertEqual(rc,0)
+        self.assertTrue(out.getvalue().isascii())
+        self.assertEqual(json.loads(out.getvalue())['work_unit'],chr(0xD800))
 
 class JunctionGuardTests(Fixture):
     """NTFS junctions are reparse points that Path.is_symlink() does not report."""
