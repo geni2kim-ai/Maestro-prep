@@ -53,3 +53,13 @@ No packet execution, secrets, networking by coordinator, autonomous retries or u
 - GitHub workflow run 61 (38252912758), initial candidate d44f2a049742d96eb5d11547d2b8757932c4ce57: Ubuntu 3.11 PASS, Windows 3.11 PASS, Ubuntu 3.13 FAIL, Windows 3.13 FAIL.
 - Failure isolated to test `test_deeply_nested_json_returns_stable_hold_error`: Python 3.13 accepted 1,200 nested containers while Python 3.11 rejected it. Other checks passed (8/9 main CI cases on failing jobs).
 - R1.1 resolution: version-independent parser depth cap (256) plus quoted-brackets regression. This record is historical; new commit CI still needs observation.
+
+## R1.2 reviewer feedback response (pending fresh CI)
+- Historical Run #62 for R1.1 only: success in its four original jobs. The old "new commit CI still needs observation" sentence is historical and is superseded by that run, not by any later commit.
+- Broad Exception fail-closed boundary is isolated to vendored O-Prep invocation/shape handling and the CLI; never catch BaseException.
+- Handle 5,000 digit integer ValueError as INVALID_JSON_SOURCE while preserving ContractError duplicate-key codes.
+- Reject unhashable receipt roles before constructing dictionary; CLI emits only safe vocabulary and ASCII-escaped JSON for surrogate inputs.
+- Synthetic tests: malicious vendor exception matrix, broken responses, route index roles, nested locks, 256/257 depth, escaped markers, giant ints, CLI exit/status and surrogate.
+- Matrix updated to Ubuntu/Windows Python 3.11/3.12/3.13, strict mypy includes CLI; macOS NOT_TESTED.
+- On fully successful PR CI, a GitHub Actions artifact contains git archive HEAD full tracked source plus SHA-256 and commit metadata. Artifact does not grant authority.
+- Actual Leonardo local executable, independent review, PR-with-codediff-finder engine and deployment: NOT_RUN.

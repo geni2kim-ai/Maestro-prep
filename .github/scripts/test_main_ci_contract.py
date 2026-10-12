@@ -16,13 +16,13 @@ class CIAccountingTests(unittest.TestCase):
         with patch.object(CI.subprocess, "run", return_value=fake):
             return CI.run_case(name, ["-m", "unittest"], kind)
     def test_all_skipped_coordinator_is_not_a_pass(self):
-        item = self.simulate("coordinator_tests", "coordinator", "Ran 41 tests\nOK (skipped=41)\n")
+        item = self.simulate("coordinator_tests", "coordinator", "Ran 59 tests\nOK (skipped=59)\n")
         self.assertFalse(item["passed"])
     def test_clean_coordinator_with_no_skips_passes(self):
-        item = self.simulate("coordinator_tests", "coordinator", "Ran 41 tests\nOK\n")
+        item = self.simulate("coordinator_tests", "coordinator", "Ran 59 tests\nOK\n")
         self.assertTrue(item["passed"])
     def test_dropped_coordinator_regression_is_rejected(self):
-        item = self.simulate("coordinator_tests", "coordinator", "Ran 40 tests\nOK\n")
+        item = self.simulate("coordinator_tests", "coordinator", "Ran 58 tests\nOK\n")
         self.assertFalse(item["passed"])
     def test_dropped_public_component_regression_is_rejected(self):
         item = self.simulate("public_component_tests", "component", "Ran 69 tests\nOK (skipped=5)\n")
