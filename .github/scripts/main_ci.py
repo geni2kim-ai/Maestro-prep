@@ -60,7 +60,7 @@ def check_component_receipt(stdout: str, count: int, skipped: int) -> tuple[bool
         return False, 'COMPONENT_SKIP_IDENTITIES_UNEXPECTED'
     return True, 'COMPONENT_SKIP_IDENTITIES_VERIFIED'
 
-# All 27 required accounting test identities: same-count substitutions reject.
+# All 38 required accounting test identities: same-count substitutions reject.
 # These are candidate-owned guardrails, NOT third-party verification.
 CI_GUARD_EXPECTED_IDS = (
     'test_all_skipped_coordinator_is_not_a_pass',
@@ -68,6 +68,7 @@ CI_GUARD_EXPECTED_IDS = (
     'test_ci_guard_duplicate_name_in_valid_count_is_blocked',
     'test_ci_guard_exact_identity_inventory_is_accepted',
     'test_ci_guard_no_names_with_matching_count_is_blocked',
+    'test_grandchild_shadow_import_before_after_environment_scrub',
     'test_cache_prefix_is_fresh_for_each_child',
     'test_ci_launch_forces_python_cache_prefix',
     'test_ci_guard_replaced_required_identity_is_blocked',
@@ -92,6 +93,7 @@ CI_GUARD_EXPECTED_IDS = (
     'test_installed_optional_schema_runs_all_without_skips',
     'test_missing_optional_schema_requires_five_skips',
     'test_removed_ci_accounting_tests_below_baseline_are_rejected',
+    'test_run_case_strips_ambient_python_environment_before_child',
     'test_unexplained_public_component_skip_is_rejected',
     'test_windows_coordinator_same_expected_name_wrong_reason_unverified',
     'test_windows_coordinator_skip_records_verified_cases_without_pass',
@@ -118,7 +120,7 @@ def check_ci_guard_trace(stderr: str, count: int) -> tuple[bool, str]:
 # Test method names alone are insufficient: disabled test bodies can print OK.
 # This literal pin is candidate-owned and does NOT constitute a trusted
 # external signature. Independent diff/HUMAN review must approve pin updates.
-CI_GUARD_SOURCE_PIN_SHA256 = "c811694b713f651d58782a4bba1da0869740c4f3a4b23ddc28d48792fa2c917d"
+CI_GUARD_SOURCE_PIN_SHA256 = "8acb8276f9fc255e98d4ff90611b3c8be494284c268a8a2a07d2436d5586cdf3"
 
 def check_ci_guard_source(root: Path) -> tuple[bool, str]:
     source = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
@@ -213,7 +215,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         # floor of seven silently allowed thirteen required tests to vanish.
         minimum = {
             'coordinator': 79, 'component': 70, 'release_tests': 6,
-            'external_gate_tests': 9, 'ci_guard_tests': 36,
+            'external_gate_tests': 9, 'ci_guard_tests': 38,
         }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
