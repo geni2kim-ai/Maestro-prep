@@ -146,7 +146,10 @@ CASES = (
 )
 
 def run_case(name: str, args: list[str], kind: str) -> dict:
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+    # -E protects one interpreter; a non--E grandchild would still inherit PYTHONPATH.
+    env = {key: value for key, value in os.environ.items()
+           if not key.upper().startswith('PYTHON')}
+    env['PYTHONDONTWRITEBYTECODE'] = '1'
     if HOST_IS_WINDOWS:
         # Resolve the runner's temp-root aliases for exact-path public component tests.
         base = Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())).resolve(strict=True)
