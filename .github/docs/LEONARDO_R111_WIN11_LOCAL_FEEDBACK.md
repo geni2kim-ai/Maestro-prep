@@ -3,7 +3,7 @@
 Source: operator-uploaded `Maestro-prep_R1.10_LOCAL_RESULT_20261013_WIN11-SINGLEHOST.zip` (SHA-256 `21afdc41ea83f650cc41a5f9d511645eef31dcffbd8b9017fdd9e05598aaa973`). This is **single-host, not two independent nodes**. Outer 14 manifest hashes and both nested node-result manifests were verified against contained bytes. Manifest digests are integrity checks, NOT origin authentication or a reviewer attestation.
 
 ## Actual local observation
-- Win11 CPython 3.11.9, local node roles 3X and 3G on the SAME Windows host.
+- Win11 CPython 3.11.9, local EXECUTOR and ADVERSARIAL role aliases on the SAME Windows host.
 - Component pin, inventory (40), coordinator (79 tests with **2 skipped**), synthetic replay (20/20): process exit 0.
 - **Offline CI 7/9**: coordinator check failed the `allowed_skips=0` coverage policy; public O-Prep component tests exited 2 on Windows `WinError 1314` while creating a file symlink. CodeDiff standalone: 21 tests, **1 symlink permission ERROR, 6 legitimate POSIX skips**. Full 6-step node runner stopped at offline_ci and did not reach CodeDiff. The multi-node merger correctly returned `INCOMPLETE_TEST_INVENTORY`.
 - Full Leonardo R2.30 and trusted TextDiff operator receipts NOT_RUN. No RedAgent/HUMAN approval. No product security bypass was demonstrated by a missing OS test privilege.
