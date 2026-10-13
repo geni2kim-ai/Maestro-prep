@@ -455,7 +455,7 @@ class R124CrossPlatformEvidenceContractTests(unittest.TestCase):
     def test_zip_member_ambiguous_alias_is_rejected_before_manifest(self):
         for name in ("evidence//alias.dat", "evidence/file:stream",
                      "evidence/trailing.", "evidence/trailing ",
-                     "evidence/bad\\nname.dat"):
+                     "evidence/bad" + chr(10) + "name.dat"):
             with self.subTest(name=name):
                 with tempfile.TemporaryDirectory() as temp:
                     archive = Path(temp) / "alias.zip"
@@ -466,7 +466,7 @@ class R124CrossPlatformEvidenceContractTests(unittest.TestCase):
     def test_receipt_ntfs_ads_and_control_character_rejected_pre_open(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in ("evidence/claim:ads", "evidence/invalid\\nname.dat",
+            for name in ("evidence/claim:ads", "evidence/invalid" + chr(10) + "name.dat",
                          "evidence//alias", "evidence/trailing."):
                 with self.subTest(name=name):
                     with self.assertRaisesRegex(BindingError, "unsafe_receipt_path"):

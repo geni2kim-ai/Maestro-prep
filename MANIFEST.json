@@ -75,8 +75,8 @@
     },
     {
       "path": "components/o_prep_v0_3/tests/test_v03_hardening.py",
-      "bytes": 27381,
-      "sha256": "8bf4dc789c0e3c65ee7e90b9abc63696b68e92364f695ae146d7a600217d74da"
+      "bytes": 27405,
+      "sha256": "017fb8e559cf53fd82a8d93cb0b9e67265b62070078dcc540c26b2a935ad4fe6"
     },
     {
       "path": "evidence/prior_simulation_baseline.json",
