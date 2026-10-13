@@ -252,6 +252,71 @@ class CIAccountingTests(unittest.TestCase):
         self.assertFalse(matched)
         self.assertEqual(digest, 'NOT_VERIFIED')
 
+    def test_ci_launch_forces_python_cache_prefix(self):
+        # Even when user sets a hostile inherited prefix, -X overrides it.
+        observed=[]
+        def fake_run(argv, **kwargs):
+            self.assertEqual(argv[1:3], ['-B', '-X'])
+            self.assertTrue(argv[3].startswith('pycache_prefix='))
+            cache=Path(argv[3].split('=',1)[1])
+            self.assertTrue(cache.is_dir())
+            self.assertEqual(list(cache.iterdir()), [])
+            observed.append(str(cache))
+            self.assertEqual(kwargs['env']['PYTHONDONTWRITEBYTECODE'], '1')
+            return subprocess.CompletedProcess(argv,0,stdout='',stderr='Ran 79 tests\nOK\n')
+        with patch.dict(CI.os.environ, {'PYTHONPYCACHEPREFIX': 'inherited-untrusted-prefix'}), patch.object(CI.subprocess,'run', side_effect=fake_run):
+            item=CI.run_case('coordinator_tests',['ignored'],'coordinator')
+        self.assertTrue(item['passed'])
+        self.assertEqual(len(observed),1)
+
+    def test_cache_prefix_is_fresh_for_each_child(self):
+        seen=[]
+        def fake_run(argv, **kwargs):
+            seen.append(argv[3])
+            return subprocess.CompletedProcess(argv,0,stdout='',stderr='Ran 79 tests\nOK\n')
+        with patch.object(CI.subprocess,'run',side_effect=fake_run):
+            first=CI.run_case('coordinator_tests',['ignored'],'coordinator')
+            second=CI.run_case('coordinator_tests',['ignored'],'coordinator')
+        self.assertTrue(first['passed'] and second['passed'])
+        self.assertEqual(len(seen),2)
+        self.assertNotEqual(seen[0],seen[1])
+
+    def test_isolated_cache_prevents_preexisting_pyc_execution(self):
+        # Actual CPython import test, not a mocked subprocess result. Both
+        # bytecode and source are harmless markers (no arbitrary commands).
+        import importlib.util
+        import marshal
+        import struct
+        import sys
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            source=root/'maestro_probe_module.py'
+            source.write_text('VALUE = "SOURCE"\n', encoding='utf-8')
+            stat=source.stat()
+            # The outer CI runs with a private -X prefix. Construct the
+            # *legacy default* __pycache__ path explicitly for the attack.
+            with patch.object(sys, 'pycache_prefix', None):
+                target=Path(importlib.util.cache_from_source(str(source)))
+            target.parent.mkdir(parents=True,exist_ok=True)
+            code=compile('VALUE = "POISON"\n',str(source),'exec')
+            cache=(importlib.util.MAGIC_NUMBER
+                   + struct.pack('<III',0,int(stat.st_mtime),stat.st_size)
+                   + marshal.dumps(code))
+            target.write_bytes(cache)
+            env=dict(os.environ, PYTHONPATH=str(root), PYTHONDONTWRITEBYTECODE='1')
+            probe='import maestro_probe_module; print(maestro_probe_module.VALUE)'
+            vulnerable=subprocess.run([sys.executable,'-B','-c',probe],env=env,
+                                      cwd=root,capture_output=True,text=True,check=True)
+            self.assertEqual(vulnerable.stdout.strip(),'POISON')
+            prefix=root/'empty-fresh-pycache'
+            prefix.mkdir()
+            safe=subprocess.run([sys.executable,'-B','-X',f'pycache_prefix={prefix}',
+                                 '-c',probe],env=env,cwd=root,capture_output=True,
+                                text=True,check=True)
+            self.assertEqual(safe.stdout.strip(),'SOURCE')
+
     def test_all_skipped_coordinator_is_not_a_pass(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 79 tests\nOK (skipped=79)\n")
         self.assertFalse(item["passed"])

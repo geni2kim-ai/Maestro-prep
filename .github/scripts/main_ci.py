@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,11 +68,14 @@ CI_GUARD_EXPECTED_IDS = (
     'test_ci_guard_duplicate_name_in_valid_count_is_blocked',
     'test_ci_guard_exact_identity_inventory_is_accepted',
     'test_ci_guard_no_names_with_matching_count_is_blocked',
+    'test_cache_prefix_is_fresh_for_each_child',
+    'test_ci_launch_forces_python_cache_prefix',
     'test_ci_guard_replaced_required_identity_is_blocked',
     'test_ci_guard_source_pin_blocks_missing_file',
     'test_ci_guard_source_pin_blocks_symlink_source',
     'test_ci_guard_source_pin_detects_neutralized_body',
     'test_ci_guard_source_pin_matches_current_checkout',
+    'test_isolated_cache_prevents_preexisting_pyc_execution',
     'test_clean_coordinator_with_no_skips_passes',
     'test_component_clean_receipt_matches_known_optional_skips',
     'test_component_opaque_skips_cannot_gain_a_green_by_count',
@@ -112,7 +116,7 @@ def check_ci_guard_trace(stderr: str, count: int) -> tuple[bool, str]:
 # Test method names alone are insufficient: disabled test bodies can print OK.
 # This literal pin is candidate-owned and does NOT constitute a trusted
 # external signature. Independent diff/HUMAN review must approve pin updates.
-CI_GUARD_SOURCE_PIN_SHA256 = "ed68940d05d2599e2fc5b4e0052ec278c9fba3d0ce22eca106a3b6044e568043"
+CI_GUARD_SOURCE_PIN_SHA256 = "1e021d2028189689f04f6b2c59e12d16e026f0234ebb21d185668df0d689f7a2"
 
 def check_ci_guard_source(root: Path) -> tuple[bool, str]:
     source = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
@@ -143,7 +147,6 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
     if HOST_IS_WINDOWS:
         # Resolve the runner's temp-root aliases for exact-path public component tests.
-        import tempfile
         base = Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())).resolve(strict=True)
         temp = base / 'maestro-prep-main-ci'
         temp.mkdir(parents=True, exist_ok=True)
@@ -154,9 +157,16 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
     actual_args = list(args)
     if (kind == 'ci_guard_tests' or (kind == 'coordinator' and HOST_IS_WINDOWS)) and actual_args[-1:] == ['-q']:
         actual_args[-1] = '-v'
-    proc = subprocess.run([sys.executable, *actual_args], cwd=ROOT, env=env,
-                          timeout=180, capture_output=True, text=True,
-                          encoding='utf-8', errors='replace')
+    # `-B` / PYTHONDONTWRITEBYTECODE disable cache WRITES, not cache READS.
+    # A pre-existing, valid .pyc can execute unreviewed test bodies while
+    # source SHA and unittest method names both still match. Assign each
+    # subprocess a *new empty* cache prefix, outside the checkout. CPython
+    # then ignores repository __pycache__ even if untrusted files remain.
+    with tempfile.TemporaryDirectory(prefix='maestro-fresh-pycache-') as cache:
+        proc = subprocess.run(
+            [sys.executable, '-B', '-X', f'pycache_prefix={cache}', *actual_args],
+            cwd=ROOT, env=env, timeout=180, capture_output=True, text=True,
+            encoding='utf-8', errors='replace')
     data = None
     if kind in {'package', 'privacy', 'pin', 'replay'}:
         try:
@@ -198,7 +208,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         # floor of seven silently allowed thirteen required tests to vanish.
         minimum = {
             'coordinator': 79, 'component': 70, 'release_tests': 6,
-            'external_gate_tests': 9, 'ci_guard_tests': 31,
+            'external_gate_tests': 9, 'ci_guard_tests': 34,
         }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
