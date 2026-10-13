@@ -17,6 +17,28 @@ class CIAccountingTests(unittest.TestCase):
         fake = subprocess.CompletedProcess(["python"], 0, stdout="", stderr=text)
         with patch.object(CI.subprocess, "run", return_value=fake):
             return CI.run_case(name, ["-m", "unittest"], kind)
+    def test_windows_coordinator_skip_records_gap_without_pass(self):
+        with patch.object(CI, 'HOST_IS_WINDOWS', True):
+            row = self.simulate('coordinator_tests', 'coordinator',
+                                'Ran 79 tests\nOK (skipped=2)\n')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['platform_gaps'], ['UNEXECUTED_SYMLINK_TESTS'])
+
+    def test_windows_unprivileged_vendor_is_not_approved_as_green(self):
+        with patch.object(CI, 'HOST_IS_WINDOWS', True):
+            row = self.simulate('public_component_tests', 'component',
+                 'VENDOR_PLATFORM_GAP:WINDOWS_SYMLINK_PRIVILEGE_UNAVAILABLE:test_symlink_to_external_file_fails_closed\n'
+                 'Ran 70 tests\nOK (skipped=3)\n')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['platform_gaps'], ['WINDOWS_SYMLINK_PRIVILEGE_UNAVAILABLE'])
+
+    def test_fake_vendor_gap_without_skips_is_still_blocked(self):
+        with patch.object(CI, 'HOST_IS_WINDOWS', True):
+            row = self.simulate('public_component_tests', 'component',
+                 'VENDOR_PLATFORM_GAP:WINDOWS_SYMLINK_PRIVILEGE_UNAVAILABLE:malicious\n'
+                 'Ran 70 tests\nOK (skipped=1)\n')
+        self.assertFalse(row['passed'])
+
     def test_all_skipped_coordinator_is_not_a_pass(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 79 tests\nOK (skipped=79)\n")
         self.assertFalse(item["passed"])

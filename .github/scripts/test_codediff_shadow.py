@@ -67,7 +67,12 @@ class CodediffIntegrationTests(unittest.TestCase):
             outside = home / "out"
             outside.mkdir()
             link = outside / "alias"
-            link.symlink_to(repo, target_is_directory=True)
+            try:
+                link.symlink_to(repo, target_is_directory=True)
+            except OSError as exc:
+                if getattr(exc, 'winerror', None) == 1314:
+                    self.skipTest('WINDOWS_SYMLINK_PRIVILEGE_UNAVAILABLE: REAL_LINK_NOT_TESTED')
+                raise
             with patch.object(module, "analyze") as fake:
                 with patch.object(module, "ROOT", repo):
                     result = module.main(["--repo", str(repo), "--base", "a" * 40,

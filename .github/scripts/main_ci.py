@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+HOST_IS_WINDOWS = os.name == 'nt'
 CASES = (
     ('release_inventory', ['tools/verify_package.py', '.'], 'package'),
     ('public_privacy', ['tools/public_privacy_check.py'], 'privacy'),
@@ -24,7 +25,7 @@ CASES = (
 
 def run_case(name: str, args: list[str], kind: str) -> dict:
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
-    if os.name == 'nt':
+    if HOST_IS_WINDOWS:
         # Resolve the runner's temp-root aliases for exact-path public component tests.
         import tempfile
         base = Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())).resolve(strict=True)
@@ -42,6 +43,10 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
             pass
     passed = proc.returncode == 0
     details = {}
+    platform_gaps = sorted(set(re.findall(r'VENDOR_PLATFORM_GAP:([A-Z0-9_]+):', proc.stderr)))
+    if platform_gaps:
+        details['platform_gaps'] = platform_gaps
+        passed = False
     if kind == 'package':
         passed = passed and isinstance(data, dict) and data.get('verified') is True
         passed = passed and data.get('files') == 40 and data.get('host_authority') is False
@@ -65,10 +70,13 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         details.update(tests=count, skipped=int(skips.group(1)) if skips else 0)
         minimum = 79 if kind == 'coordinator' else (6 if kind == 'release_tests' else (7 if kind == 'ci_guard_tests' else (9 if kind == 'external_gate_tests' else 70)))
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
-                         (1 if os.name == 'nt' else 0)) if kind == 'component' else 0
+                         (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
         passed = passed and details['skipped'] == allowed_skips
         passed = passed and count >= minimum and re.search(r'(?m)^OK(?: \(skipped=\d+\))?$', proc.stderr) is not None
-        if kind == 'component' and os.name == 'nt':
+        if kind == 'coordinator' and HOST_IS_WINDOWS and details['skipped']:
+            details['platform_gaps'] = ['UNEXECUTED_SYMLINK_TESTS']
+            passed = False
+        if kind == 'component' and HOST_IS_WINDOWS:
             passed = passed and proc.stderr.count('VENDOR_PLATFORM_EXCEPTION') == 1
             passed = passed and details['skipped'] >= 1
     receipt = dict(name=name, passed=bool(passed), exit_code=proc.returncode,
