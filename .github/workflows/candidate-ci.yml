@@ -41,7 +41,7 @@ jobs:
           MYPYPATH: components/o_prep_v0_3/src
         run: python -m mypy --strict --cache-dir "${{ runner.temp }}/mypy-cache" maestro_prep/coordinator.py maestro_prep/cli.py components/o_prep_v0_3/src/o_prep.py components/o_prep_v0_3/src/evidence_bindings.py
       - name: Verify public payload and synthetic regression checks
-        run: python .github/scripts/main_ci.py
+        run: python -I -B .github/scripts/main_ci.py
 
   full-source-bundle:
     name: Verified full tracked-source snapshot (non-deployable)

@@ -252,13 +252,55 @@ class CIAccountingTests(unittest.TestCase):
         self.assertFalse(matched)
         self.assertEqual(digest, 'NOT_VERIFIED')
 
+    def test_ci_launch_ignores_inherited_python_environment(self):
+        # Genuine child prefix and safe startup switches must be supplied
+        # even when ambient PYTHONPATH contains unreviewed modules.
+        with patch.dict(CI.os.environ, {'PYTHONPATH':'untrusted-path',
+                                       'PYTHONPYCACHEPREFIX':'untrusted-cache'}):
+            with patch.object(CI.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                ['python'], 0, stdout='', stderr='Ran 79 tests\nOK\n')) as runner:
+                row=CI.run_case('coordinator_tests',['ignored'],'coordinator')
+        self.assertTrue(row['passed'])
+        argv=runner.call_args.args[0]
+        self.assertEqual(argv[1:5], ['-E', '-s', '-B', '-X'])
+        self.assertTrue(argv[5].startswith('pycache_prefix='))
+
+    def test_pythonpath_unittest_shadow_does_not_run_in_isolated_child(self):
+        # Actual CPython child import; only a harmless temp-file marker is
+        # written by the simulated untrusted unittest module. No live
+        # services, host secrets or privileged filesystem nodes are touched.
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='maestro-shadow-import-') as tmp:
+            root=Path(tmp)
+            shadow=root/'untrusted'/'unittest'
+            shadow.mkdir(parents=True)
+            (shadow/'__init__.py').write_text(
+                'from pathlib import Path\n'
+                'Path(__import__("os").environ["MAESTRO_SIMULATED_MARKER"]).write_text("EXECUTED")\n',
+                encoding='utf-8')
+            marker=root/'marker.txt'
+            env=dict(os.environ,PYTHONPATH=str(root/'untrusted'),
+                     MAESTRO_SIMULATED_MARKER=str(marker),
+                     PYTHONDONTWRITEBYTECODE='1')
+            args=['-B','-c','import unittest; print(unittest.__file__)']
+            old=subprocess.run([CI.sys.executable,*args],env=env,cwd=root,
+                               capture_output=True,text=True,check=True)
+            self.assertIn(str(shadow),old.stdout)
+            self.assertEqual(marker.read_text(),'EXECUTED')
+            marker.unlink()
+            new=subprocess.run([CI.sys.executable,'-E','-s',*args],env=env,cwd=root,
+                               capture_output=True,text=True,check=True)
+            self.assertNotIn(str(shadow),new.stdout)
+            self.assertFalse(marker.exists())
+
     def test_ci_launch_forces_python_cache_prefix(self):
         # Even when user sets a hostile inherited prefix, -X overrides it.
         observed=[]
         def fake_run(argv, **kwargs):
-            self.assertEqual(argv[1:3], ['-B', '-X'])
-            self.assertTrue(argv[3].startswith('pycache_prefix='))
-            cache=Path(argv[3].split('=',1)[1])
+            self.assertEqual(argv[1:5], ['-E', '-s', '-B', '-X'])
+            self.assertTrue(argv[5].startswith('pycache_prefix='))
+            cache=Path(argv[5].split('=',1)[1])
             self.assertTrue(cache.is_dir())
             self.assertEqual(list(cache.iterdir()), [])
             observed.append(str(cache))
@@ -272,7 +314,7 @@ class CIAccountingTests(unittest.TestCase):
     def test_cache_prefix_is_fresh_for_each_child(self):
         seen=[]
         def fake_run(argv, **kwargs):
-            seen.append(argv[3])
+            seen.append(argv[5])
             return subprocess.CompletedProcess(argv,0,stdout='',stderr='Ran 79 tests\nOK\n')
         with patch.object(CI.subprocess,'run',side_effect=fake_run):
             first=CI.run_case('coordinator_tests',['ignored'],'coordinator')

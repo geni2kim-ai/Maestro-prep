@@ -71,6 +71,8 @@ CI_GUARD_EXPECTED_IDS = (
     'test_cache_prefix_is_fresh_for_each_child',
     'test_ci_launch_forces_python_cache_prefix',
     'test_ci_guard_replaced_required_identity_is_blocked',
+    'test_ci_launch_ignores_inherited_python_environment',
+    'test_pythonpath_unittest_shadow_does_not_run_in_isolated_child',
     'test_ci_guard_source_pin_blocks_missing_file',
     'test_ci_guard_source_pin_blocks_symlink_source',
     'test_ci_guard_source_pin_detects_neutralized_body',
@@ -116,7 +118,7 @@ def check_ci_guard_trace(stderr: str, count: int) -> tuple[bool, str]:
 # Test method names alone are insufficient: disabled test bodies can print OK.
 # This literal pin is candidate-owned and does NOT constitute a trusted
 # external signature. Independent diff/HUMAN review must approve pin updates.
-CI_GUARD_SOURCE_PIN_SHA256 = "1e021d2028189689f04f6b2c59e12d16e026f0234ebb21d185668df0d689f7a2"
+CI_GUARD_SOURCE_PIN_SHA256 = "c811694b713f651d58782a4bba1da0869740c4f3a4b23ddc28d48792fa2c917d"
 
 def check_ci_guard_source(root: Path) -> tuple[bool, str]:
     source = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
@@ -164,7 +166,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
     # then ignores repository __pycache__ even if untrusted files remain.
     with tempfile.TemporaryDirectory(prefix='maestro-fresh-pycache-') as cache:
         proc = subprocess.run(
-            [sys.executable, '-B', '-X', f'pycache_prefix={cache}', *actual_args],
+            [sys.executable, '-E', '-s', '-B', '-X', f'pycache_prefix={cache}', *actual_args],
             cwd=ROOT, env=env, timeout=180, capture_output=True, text=True,
             encoding='utf-8', errors='replace')
     data = None
@@ -208,7 +210,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         # floor of seven silently allowed thirteen required tests to vanish.
         minimum = {
             'coordinator': 79, 'component': 70, 'release_tests': 6,
-            'external_gate_tests': 9, 'ci_guard_tests': 34,
+            'external_gate_tests': 9, 'ci_guard_tests': 36,
         }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
