@@ -223,6 +223,69 @@ class CodediffIntegrationTests(unittest.TestCase):
             self.assertFalse((repo / "review.json").exists())
             self.assertFalse((moved / "review.json").exists())
 
+    def test_named_report_swap_after_fsync_is_blocked(self):
+        if module.os.name != "posix":
+            self.skipTest("POSIX descriptor-based report verification")
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            repo = home / "repo"
+            repo.mkdir()
+            out = home / "outside"
+            out.mkdir()
+            expected = out / "review.json"
+            moved = out / "original.json"
+            original_fsync = module.os.fsync
+            swapped = [False]
+            def replace_named_entry(fd):
+                if not swapped[0]:
+                    swapped[0] = True
+                    expected.rename(moved)
+                    expected.write_text('{"gate_conclusion":"success","authority_effect":"APPROVED"}\n')
+                return original_fsync(fd)
+            with patch.object(module.os, "fsync", side_effect=replace_named_entry):
+                with self.assertRaisesRegex(ValueError, "REVIEW_OUTPUT_IDENTITY_CHANGED"):
+                    module.persist_report_bound(expected, repo, {
+                        "gate_conclusion": "action_required", "authority_effect": "NONE"})
+            self.assertTrue(swapped[0])
+            self.assertTrue(moved.exists())
+            # Attack file is not silently treated as a success receipt and
+            # it is *not* unlinked as if owned by this invocation.
+            self.assertEqual(json.loads(expected.read_text())["authority_effect"], "APPROVED")
+
+    def test_named_receipt_bytes_changed_after_fsync_is_blocked(self):
+        if module.os.name != "posix":
+            self.skipTest("POSIX descriptor-based report verification")
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            repo = home / "repo"
+            repo.mkdir()
+            out = home / "outside"
+            out.mkdir()
+            expected = out / "review.json"
+            original_fsync = module.os.fsync
+            def rewrite_named_entry(fd):
+                # Same inode and same path, but altered final payload bytes.
+                expected.write_text('{"sensor":"TRUSTED"}\n')
+                return original_fsync(fd)
+            with patch.object(module.os, "fsync", side_effect=rewrite_named_entry):
+                with self.assertRaisesRegex(ValueError, "REVIEW_OUTPUT_(BYTES|IDENTITY)_CHANGED"):
+                    module.persist_report_bound(expected, repo, {"sensor":"DEGRADED_GIT_INVENTORY"})
+            self.assertFalse(expected.exists())
+
+    def test_large_report_is_rejected_before_any_file_creation(self):
+        if module.os.name != "posix":
+            self.skipTest("POSIX descriptor-based report verification")
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder)
+            repo=home/"repo"
+            repo.mkdir()
+            d=home/"outside"
+            d.mkdir()
+            target=d/"review.json"
+            with self.assertRaisesRegex(ValueError, "REVIEW_OUTPUT_TOO_LARGE"):
+                module.persist_report_bound(target, repo, {"huge":"X"*(1024*1024)})
+            self.assertFalse(target.exists())
+
     def test_leonardo_candidate_sha_is_not_user_supplied(self):
         descriptor = json.loads(module.PIN_PATH.read_text(encoding="utf-8"))
         descriptor["leonardo"]["latest_examined_candidate_sha"] = "0" * 40

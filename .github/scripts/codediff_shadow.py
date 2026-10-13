@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 from types import MappingProxyType, ModuleType
@@ -246,6 +247,7 @@ def persist_report_bound(path: Path, root: Path, report: dict[str, Any]) -> None
         raise ValueError("REVIEW_OUTPUT_INVALID")
     dirfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     created = False
+    owned_identity: tuple[int, int] | None = None
     try:
         def same_parent() -> bool:
             try:
@@ -260,24 +262,50 @@ def persist_report_bound(path: Path, root: Path, report: dict[str, Any]) -> None
         if not same_parent():
             raise ValueError("REVIEW_OUTPUT_PARENT_CHANGED")
         # O_EXCL/O_NOFOLLOW protect against existing-file/symlink swapping.
+        # Serialize once, then prove the path points to the exact inode
+        # containing those exact bytes. The parent-FD check alone permits
+        # another writer to replace the directory entry after O_EXCL.
+        payload = (json.dumps(report, sort_keys=True, indent=2) + "\n").encode("utf-8")
+        if len(payload) > 1024 * 1024:
+            raise ValueError("REVIEW_OUTPUT_TOO_LARGE")
         fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600, dir_fd=dirfd)
         created = True
+        owned = os.fstat(fd)
+        owned_identity = (owned.st_dev, owned.st_ino)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # Reopen the *named* entry without following links; neither file
+        # descriptor alone nor a successful fsync proves the current path.
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(report, handle, sort_keys=True, indent=2)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-        except BaseException:
-            # O_EXCL created the file. Never leave a partial receipt as PASS.
-            raise
+            check_fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                               dir_fd=dirfd)
+        except OSError as exc:
+            raise ValueError("REVIEW_OUTPUT_IDENTITY_CHANGED") from exc
+        try:
+            observed = os.fstat(check_fd)
+            if (not stat.S_ISREG(observed.st_mode)
+                    or (observed.st_dev, observed.st_ino) != owned_identity
+                    or observed.st_nlink != 1
+                    or observed.st_size != len(payload)):
+                raise ValueError("REVIEW_OUTPUT_IDENTITY_CHANGED")
+            stored = os.read(check_fd, len(payload) + 1)
+            if stored != payload:
+                raise ValueError("REVIEW_OUTPUT_BYTES_CHANGED")
+        finally:
+            os.close(check_fd)
         if not same_parent():
             raise ValueError("REVIEW_OUTPUT_PARENT_CHANGED")
     except BaseException:
-        if created:
+        if created and owned_identity is not None:
             try:
-                os.unlink(path.name, dir_fd=dirfd)
+                # Never delete another process's substituted receipt. Only
+                # remove the inode that this invocation actually created.
+                candidate = os.stat(path.name, dir_fd=dirfd, follow_symlinks=False)
+                if (candidate.st_dev, candidate.st_ino) == owned_identity:
+                    os.unlink(path.name, dir_fd=dirfd)
             except OSError:
                 pass
         raise
