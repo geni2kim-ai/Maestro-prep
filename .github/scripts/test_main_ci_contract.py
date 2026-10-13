@@ -12,6 +12,11 @@ CI = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CI)
 
 class CIAccountingTests(unittest.TestCase):
+    def ci_guard_trace(self, names):
+        return (''.join(f'{name} (test_main_ci_contract.CIAccountingTests.{name}) ... ok\n'
+                        for name in names)
+                + f'Ran {len(names)} tests in 0.006s\nOK\n')
+
     def simulate(self, name, kind, text):
         if kind == "component" and CI.os.name == "nt":
             text = "VENDOR_PLATFORM_EXCEPTION\n" + text
@@ -166,11 +171,45 @@ class CIAccountingTests(unittest.TestCase):
 
     def test_ci_accounting_current_floor_runs_normally(self):
         fake = subprocess.CompletedProcess(['python'], 0, stdout='',
-                                           stderr='Ran 23 tests in 0.006s\nOK\n')
+                                           stderr=self.ci_guard_trace(CI.CI_GUARD_EXPECTED_IDS))
         with patch.object(CI.subprocess, 'run', return_value=fake):
             row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
         self.assertTrue(row['passed'])
-        self.assertEqual(row['tests'], 23)
+        self.assertEqual(row['tests'], len(CI.CI_GUARD_EXPECTED_IDS))
+
+    def test_ci_guard_replaced_required_identity_is_blocked(self):
+        ids = list(CI.CI_GUARD_EXPECTED_IDS)
+        ids[0] = 'test_replacement_dummy'
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='', stderr=self.ci_guard_trace(ids))
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['test_identity_status'], 'CI_GUARD_TEST_IDENTITIES_UNEXPECTED')
+
+    def test_ci_guard_no_names_with_matching_count_is_blocked(self):
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='',
+                  stderr=f'Ran {len(CI.CI_GUARD_EXPECTED_IDS)} tests\nOK\n')
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['test_identity_status'], 'CI_GUARD_TEST_IDENTITIES_UNEXPECTED')
+
+    def test_ci_guard_duplicate_name_in_valid_count_is_blocked(self):
+        ids = list(CI.CI_GUARD_EXPECTED_IDS)
+        ids[0] = ids[1]
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='', stderr=self.ci_guard_trace(ids))
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['test_identity_status'], 'CI_GUARD_TEST_IDENTITIES_UNEXPECTED')
+
+    def test_ci_guard_exact_identity_inventory_is_accepted(self):
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='',
+                  stderr=self.ci_guard_trace(CI.CI_GUARD_EXPECTED_IDS))
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
+        self.assertTrue(row['passed'])
+        self.assertEqual(row['test_identity_status'], 'CI_GUARD_TEST_IDENTITIES_VERIFIED')
 
     def test_all_skipped_coordinator_is_not_a_pass(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 79 tests\nOK (skipped=79)\n")

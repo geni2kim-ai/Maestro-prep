@@ -58,6 +58,51 @@ def check_component_receipt(stdout: str, count: int, skipped: int) -> tuple[bool
         return False, 'COMPONENT_SKIP_IDENTITIES_UNEXPECTED'
     return True, 'COMPONENT_SKIP_IDENTITIES_VERIFIED'
 
+# All 27 required accounting test identities: same-count substitutions reject.
+# These are candidate-owned guardrails, NOT third-party verification.
+CI_GUARD_EXPECTED_IDS = (
+    'test_all_skipped_coordinator_is_not_a_pass',
+    'test_ci_accounting_current_floor_runs_normally',
+    'test_ci_guard_duplicate_name_in_valid_count_is_blocked',
+    'test_ci_guard_exact_identity_inventory_is_accepted',
+    'test_ci_guard_no_names_with_matching_count_is_blocked',
+    'test_ci_guard_replaced_required_identity_is_blocked',
+    'test_clean_coordinator_with_no_skips_passes',
+    'test_component_clean_receipt_matches_known_optional_skips',
+    'test_component_opaque_skips_cannot_gain_a_green_by_count',
+    'test_component_receipt_with_wrong_summary_count_blocks',
+    'test_component_same_skip_count_wrong_identity_is_rejected',
+    'test_component_skip_duplicate_does_not_substitute_required_case',
+    'test_conflicting_run_counts_even_with_single_ok_are_rejected',
+    'test_contradictory_coordinator_summary_is_not_green',
+    'test_dropped_coordinator_regression_is_rejected',
+    'test_dropped_public_component_regression_is_rejected',
+    'test_fake_vendor_gap_without_skips_is_still_blocked',
+    'test_installed_optional_schema_runs_all_without_skips',
+    'test_missing_optional_schema_requires_five_skips',
+    'test_removed_ci_accounting_tests_below_baseline_are_rejected',
+    'test_unexplained_public_component_skip_is_rejected',
+    'test_windows_coordinator_same_expected_name_wrong_reason_unverified',
+    'test_windows_coordinator_skip_records_verified_cases_without_pass',
+    'test_windows_coordinator_summary_without_verbose_is_unverified',
+    'test_windows_coordinator_unrelated_skips_not_misattributed',
+    'test_windows_coordinator_uses_verbose_mode_for_trace',
+    'test_windows_unprivileged_vendor_is_not_approved_as_green',
+)
+
+def check_ci_guard_trace(stderr: str, count: int) -> tuple[bool, str]:
+    # unittest -v emits one observed name and result per test. Compare the
+    # identity-qualified executed set rather than trusting a numeric summary.
+    names = re.findall(
+        r'(?m)^(test_[A-Za-z0-9_]+) \(test_main_ci_contract\.CIAccountingTests\.\1\) \.\.\. ok\r?$',
+        stderr,
+    )
+    verified = (len(names) == count == len(CI_GUARD_EXPECTED_IDS)
+                and len(names) == len(set(names))
+                and set(names) == set(CI_GUARD_EXPECTED_IDS))
+    return (verified, 'CI_GUARD_TEST_IDENTITIES_VERIFIED' if verified
+            else 'CI_GUARD_TEST_IDENTITIES_UNEXPECTED')
+
 CASES = (
     ('release_inventory', ['tools/verify_package.py', '.'], 'package'),
     ('public_privacy', ['tools/public_privacy_check.py'], 'privacy'),
@@ -82,7 +127,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
     # Only Windows requires per-test skip provenance. A summary count is not
     # evidence that the two known symlink-dependent cases were skipped.
     actual_args = list(args)
-    if kind == 'coordinator' and HOST_IS_WINDOWS and actual_args[-1:] == ['-q']:
+    if (kind == 'ci_guard_tests' or (kind == 'coordinator' and HOST_IS_WINDOWS)) and actual_args[-1:] == ['-q']:
         actual_args[-1] = '-v'
     proc = subprocess.run([sys.executable, *actual_args], cwd=ROOT, env=env,
                           timeout=180, capture_output=True, text=True,
@@ -128,7 +173,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         # floor of seven silently allowed thirteen required tests to vanish.
         minimum = {
             'coordinator': 79, 'component': 70, 'release_tests': 6,
-            'external_gate_tests': 9, 'ci_guard_tests': 23,
+            'external_gate_tests': 9, 'ci_guard_tests': 27,
         }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
@@ -141,6 +186,10 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         if kind == 'component':
             verified, reason = check_component_receipt(proc.stdout, count, details['skipped'])
             details['skip_inventory_status'] = reason
+            passed = passed and verified
+        if kind == 'ci_guard_tests':
+            verified, reason = check_ci_guard_trace(proc.stderr, count)
+            details['test_identity_status'] = reason
             passed = passed and verified
         if kind == 'coordinator' and HOST_IS_WINDOWS and details['skipped']:
             # unittest -v names each skipped case; do not infer the reason
