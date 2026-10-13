@@ -40,6 +40,10 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 # accidental/partial pin tampering, not malicious redefinition of the checker.
 CODEDIFF_UPSTREAM_REF = "69a49faa35b56d48e9e3067e5f484b443735df67"
 CODEDIFF_UPSTREAM_REPO = "geni2kim-ai/PR-with-codediff-finder"
+LEONARDO_UPSTREAM_REPO = "geni2kim-ai/Leonardo"
+LEONARDO_MAIN_REF = "a4e0bc631d1033e8ba25a0a3e7b1457ca3d6a0d7"
+LEONARDO_CANDIDATE_REF = "80bb6891e772feb506a79dfe2c3beac2b5ae1dcc"
+LEONARDO_CANDIDATE_BRANCH = "candidate/leonardo-r230-excluded-import-guard-20261012"
 TRUSTED_VENDOR_BLOBS = {
     ".github/review_tools/codediff_v25/policy_engine.py": "b1466919d765d0b905ba1ba4447efddf87099efb",
     ".github/review_tools/codediff_v25/protected-paths.yml": "9abc44dd8d390fc6cb9f6c11d0224e779d6362bb",
@@ -103,6 +107,18 @@ def trusted_source_snapshot() -> tuple[dict[str, Any], Any]:
             or pins["codediff"]["trusted_textdiff_sensor"] is not False
             or pins["leonardo"]["promoted_to_mandatory_runtime"] is not False):
         raise ValueError("UNAUTHORIZED_REVIEW_OR_LEONARDO_PROMOTION")
+    # The SHADOW receipt emits the Leonardo candidate ref as provenance.
+    # Previously an altered descriptor was accepted while retaining a valid
+    # CodeDiff upstream SHA. Lock these refs separately; this is NOT proof of
+    # a Leonardo runtime or an endorsement of the candidate's failed CI.
+    leo = pins["leonardo"]
+    if (leo.get("repo") != LEONARDO_UPSTREAM_REPO
+            or leo.get("stable_main_sha") != LEONARDO_MAIN_REF
+            or leo.get("latest_examined_candidate_sha") != LEONARDO_CANDIDATE_REF
+            or leo.get("candidate_branch") != LEONARDO_CANDIDATE_BRANCH
+            or leo.get("version") != "R2.30 candidate"
+            or leo.get("live_execution") != "NOT_RUN"):
+        raise ValueError("LEONARDO_PROVENANCE_PIN_MISMATCH")
     if (pins["codediff"].get("repo") != CODEDIFF_UPSTREAM_REPO
             or pins["codediff"].get("source_commit") != CODEDIFF_UPSTREAM_REF
             or pins["codediff"].get("independent_review") != "NOT_RUN"
@@ -213,6 +229,62 @@ def analyze(repo: Path, base: str, head: str) -> dict[str, Any]:
     }
 
 
+
+def persist_report_bound(path: Path, root: Path, report: dict[str, Any]) -> None:
+    """Write a new report relative to a held directory FD (POSIX only).
+
+    Lexical and resolved path checks alone are vulnerable to a parent-link
+    exchange after the check. Never follow a replaced parent after opening its
+    handle. On unsupported systems, HOLD rather than pretending atomicity.
+    """
+    if (os.name != "posix" or not hasattr(os, "O_DIRECTORY")
+            or not hasattr(os, "O_NOFOLLOW")
+            or os.open not in os.supports_dir_fd):
+        raise ValueError("OUTPUT_DIRFD_UNSUPPORTED")
+    parent = path.parent
+    if parent.is_symlink() or path.exists() or path.is_symlink():
+        raise ValueError("REVIEW_OUTPUT_INVALID")
+    dirfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    created = False
+    try:
+        def same_parent() -> bool:
+            try:
+                st = os.stat(parent, follow_symlinks=False)
+                bound = os.fstat(dirfd)
+                real = parent.resolve(strict=True)
+                return (parent.is_dir() and not parent.is_symlink()
+                        and not real.is_relative_to(root)
+                        and st.st_dev == bound.st_dev and st.st_ino == bound.st_ino)
+            except OSError:
+                return False
+        if not same_parent():
+            raise ValueError("REVIEW_OUTPUT_PARENT_CHANGED")
+        # O_EXCL/O_NOFOLLOW protect against existing-file/symlink swapping.
+        fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=dirfd)
+        created = True
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(report, handle, sort_keys=True, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        except BaseException:
+            # O_EXCL created the file. Never leave a partial receipt as PASS.
+            raise
+        if not same_parent():
+            raise ValueError("REVIEW_OUTPUT_PARENT_CHANGED")
+    except BaseException:
+        if created:
+            try:
+                os.unlink(path.name, dir_fd=dirfd)
+            except OSError:
+                pass
+        raise
+    finally:
+        os.close(dirfd)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, required=True)
@@ -231,16 +303,14 @@ def main(argv: list[str] | None = None) -> int:
                 or parent.is_relative_to(root)):
             raise ValueError("REVIEW_OUTPUT_INVALID")
         report = analyze(root, ns.base, ns.head)
-        with path.open("x", encoding="utf-8") as handle:
-            json.dump(report, handle, sort_keys=True, indent=2)
-            handle.write("\n")
+        persist_report_bound(path, root, report)
         print(json.dumps({"sensor": "CODEDIFF_V25_POLICY_EXECUTED",
                           "mode": report["sensor_mode"],
                           "required_level": report["required_level"],
                           "gate_conclusion": report["gate_conclusion"],
                           "head_sha": ns.head, "paths": len(report["changed_paths"])}))
         return 0
-    except (OSError, ValueError, KeyError, ImportError) as exc:
+    except (OSError, ValueError, KeyError, ImportError, NotImplementedError) as exc:
         reason = str(exc) if isinstance(exc, ValueError) and re.fullmatch(
             r"[A-Z][A-Z0-9_]{1,79}", str(exc)) else "REVIEW_INTEGRATION_ERROR"
         print(json.dumps({"status": "BLOCKED", "code": reason,

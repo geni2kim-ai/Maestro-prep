@@ -168,6 +168,101 @@ class CodediffIntegrationTests(unittest.TestCase):
             self.assertEqual(module.object_id(data), module.TRUSTED_VENDOR_BLOBS[
                 ".github/review_tools/codediff_v25/" + policy])
 
+    def test_output_parent_swapped_after_check_is_not_followed(self):
+        if module.os.name != "posix":
+            self.skipTest("Linux/POSIX fd-bound writer required")
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            repo = home / "repo"
+            repo.mkdir()
+            out = home / "outside"
+            out.mkdir()
+            parent = out / "clean"
+            parent.mkdir()
+            moved = out / "moved"
+            expected = repo / "review.json"
+            def swap(*args):
+                parent.rename(moved)
+                parent.symlink_to(repo, target_is_directory=True)
+                return {"sensor_mode": "DEGRADED_GIT_INVENTORY",
+                        "required_level": "HUMAN", "gate_conclusion": "action_required",
+                        "changed_paths": ["sample.py"]}
+            with patch.object(module, "analyze", side_effect=swap):
+                result = module.main(["--repo", str(repo), "--base", "a" * 40,
+                                     "--head", "b" * 40,
+                                     "--out", str(parent / "review.json")])
+            self.assertEqual(result, 2)
+            self.assertFalse(expected.exists())
+            self.assertFalse((moved / "review.json").exists())
+
+    def test_parent_swap_after_dirfd_open_is_rejected(self):
+        if module.os.name != "posix":
+            self.skipTest("POSIX directory-descriptor regression")
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            repo = home / "repo"
+            repo.mkdir()
+            out = home / "outside"
+            out.mkdir()
+            parent = out / "clean"
+            parent.mkdir()
+            moved = out / "moved"
+            original_fstat = module.os.fstat
+            did_swap = [False]
+            def linked_swap(fd):
+                if not did_swap[0]:
+                    did_swap[0] = True
+                    parent.rename(moved)
+                    parent.symlink_to(repo, target_is_directory=True)
+                return original_fstat(fd)
+            with patch.object(module.os, "fstat", side_effect=linked_swap):
+                with self.assertRaisesRegex(ValueError, "REVIEW_OUTPUT_PARENT_CHANGED"):
+                    module.persist_report_bound(parent / "review.json", repo,
+                                                {"result": "SIMULATED"})
+            self.assertTrue(did_swap[0])
+            self.assertFalse((repo / "review.json").exists())
+            self.assertFalse((moved / "review.json").exists())
+
+    def test_leonardo_candidate_sha_is_not_user_supplied(self):
+        descriptor = json.loads(module.PIN_PATH.read_text(encoding="utf-8"))
+        descriptor["leonardo"]["latest_examined_candidate_sha"] = "0" * 40
+        with tempfile.TemporaryDirectory() as folder:
+            pin = Path(folder) / "pin.json"
+            pin.write_text(json.dumps(descriptor), encoding="utf-8")
+            with patch.object(module, "PIN_PATH", pin):
+                with self.assertRaisesRegex(ValueError, "LEONARDO_PROVENANCE_PIN_MISMATCH"):
+                    module.trusted_source_snapshot()
+
+    def test_leonardo_main_and_branch_are_pinned(self):
+        for key, value in (("stable_main_sha", "0" * 40),
+                           ("candidate_branch", "candidate/misleading"),
+                           ("repo", "attacker/Leonardo")):
+            with self.subTest(key=key):
+                descriptor = json.loads(module.PIN_PATH.read_text(encoding="utf-8"))
+                descriptor["leonardo"][key] = value
+                with tempfile.TemporaryDirectory() as folder:
+                    pin = Path(folder) / "pin.json"
+                    pin.write_text(json.dumps(descriptor), encoding="utf-8")
+                    with patch.object(module, "PIN_PATH", pin):
+                        with self.assertRaisesRegex(ValueError, "LEONARDO_PROVENANCE_PIN_MISMATCH"):
+                            module.trusted_source_snapshot()
+
+    def test_safe_new_output_receipt_has_restricted_mode(self):
+        if module.os.name != "posix":
+            self.skipTest("POSIX directory-descriptor regression")
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            repo = home / "repo"
+            repo.mkdir()
+            parent = home / "outside"
+            parent.mkdir()
+            path = parent / "review.json"
+            module.persist_report_bound(path, repo, {"result": "NON_FINAL"})
+            self.assertEqual(json.loads(path.read_text()), {"result": "NON_FINAL"})
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            with self.assertRaisesRegex(ValueError, "REVIEW_OUTPUT_INVALID"):
+                module.persist_report_bound(path, repo, {"result": "OVERWRITE"})
+
     def test_shell_alias_cannot_change_expected_git_command(self):
         with patch.object(module.subprocess, "run") as proc:
             proc.return_value.returncode = 0
