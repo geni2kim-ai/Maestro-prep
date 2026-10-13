@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Execute included public compatibility tests. No host-approved original is tested."""
 import os
+import json
 import sys
 import tempfile
 import unittest
@@ -52,4 +53,17 @@ if os.name == 'nt':
 
 suite = unittest.TestLoader().discover(str(PUBLIC_COMPONENT / 'tests'))
 result = unittest.TextTestRunner(verbosity=1).run(suite)
+# A machine-readable skip inventory is required for provenance-sensitive CI
+# accounting. A numeric skipped total cannot identify which tests were lost.
+skips = sorted(({'id': type(test).__name__ + '.' + test._testMethodName,
+                 'reason': reason} for test, reason in result.skipped),
+               key=lambda item: (item['id'], item['reason']))
+print('MAESTRO_COMPONENT_TEST_RESULT_V1=' + json.dumps({
+    'schema': 'MAESTRO_COMPONENT_TEST_RESULT_V1',
+    'tests_run': result.testsRun,
+    'errors': len(result.errors),
+    'failures': len(result.failures),
+    'skipped': skips,
+    'was_successful': result.wasSuccessful(),
+}, sort_keys=True), flush=True)
 raise SystemExit(0 if result.wasSuccessful() else 2)

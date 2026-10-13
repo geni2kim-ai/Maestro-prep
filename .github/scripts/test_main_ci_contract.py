@@ -1,5 +1,6 @@
 """Synthetic CI accounting contract checks; no external runner touched."""
 import importlib.util
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -14,7 +15,19 @@ class CIAccountingTests(unittest.TestCase):
     def simulate(self, name, kind, text):
         if kind == "component" and CI.os.name == "nt":
             text = "VENDOR_PLATFORM_EXCEPTION\n" + text
-        fake = subprocess.CompletedProcess(["python"], 0, stdout="", stderr=text)
+        stdout = ''
+        if kind == 'component':
+            # Honest fixture for existing count tests. Dedicated negative cases
+            # below modify identities and require fail-closed handling.
+            import re
+            count = re.search(r'Ran (\d+) tests', text)
+            stdout = 'MAESTRO_COMPONENT_TEST_RESULT_V1=' + json.dumps({
+                'schema': 'MAESTRO_COMPONENT_TEST_RESULT_V1',
+                'tests_run': int(count.group(1)) if count else 0,
+                'errors': 0, 'failures': 0, 'was_successful': True,
+                'skipped': CI.expected_component_skips(),
+            }) + '\n'
+        fake = subprocess.CompletedProcess(["python"], 0, stdout=stdout, stderr=text)
         with patch.object(CI.subprocess, "run", return_value=fake):
             return CI.run_case(name, ["-m", "unittest"], kind)
     def test_windows_coordinator_skip_records_verified_cases_without_pass(self):
@@ -69,6 +82,70 @@ class CIAccountingTests(unittest.TestCase):
                  'VENDOR_PLATFORM_GAP:WINDOWS_SYMLINK_PRIVILEGE_UNAVAILABLE:malicious\n'
                  'Ran 70 tests\nOK (skipped=1)\n')
         self.assertFalse(row['passed'])
+
+    def test_component_opaque_skips_cannot_gain_a_green_by_count(self):
+        # R1.12 incorrectly accepted a matching summary without test IDs.
+        from unittest.mock import patch
+        with patch.object(CI.importlib.util, 'find_spec', return_value=None):
+            fake = subprocess.CompletedProcess(['python'], 0, stdout='',
+                    stderr='Ran 70 tests\nOK (skipped=5)\n')
+            with patch.object(CI.subprocess, 'run', return_value=fake):
+                row = CI.run_case('public_component_tests', ['ignored'], 'component')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['skip_inventory_status'], 'COMPONENT_SKIP_INVENTORY_MISSING')
+
+    def test_component_same_skip_count_wrong_identity_is_rejected(self):
+        with patch.object(CI.importlib.util, 'find_spec', return_value=None):
+            skipped = CI.expected_component_skips()
+            skipped[0] = {'id':'SensitiveTests.test_critical_guard','reason':'optional package'}
+            fake = subprocess.CompletedProcess(['python'], 0,
+                    stdout='MAESTRO_COMPONENT_TEST_RESULT_V1='+json.dumps({
+                        'schema':'MAESTRO_COMPONENT_TEST_RESULT_V1', 'tests_run':70,
+                        'errors':0,'failures':0,'skipped':skipped,'was_successful':True})+'\n',
+                    stderr='Ran 70 tests\nOK (skipped=5)\n')
+            with patch.object(CI.subprocess, 'run', return_value=fake):
+                row=CI.run_case('public_component_tests', ['ignored'], 'component')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['skip_inventory_status'], 'COMPONENT_SKIP_IDENTITIES_UNEXPECTED')
+
+    def test_component_skip_duplicate_does_not_substitute_required_case(self):
+        with patch.object(CI.importlib.util, 'find_spec', return_value=None):
+            skipped=CI.expected_component_skips()
+            skipped[0]=skipped[1]
+            fake=subprocess.CompletedProcess(['python'],0,
+                    stdout='MAESTRO_COMPONENT_TEST_RESULT_V1='+json.dumps({
+                        'schema':'MAESTRO_COMPONENT_TEST_RESULT_V1','tests_run':70,
+                        'errors':0,'failures':0,'skipped':skipped,'was_successful':True})+'\n',
+                    stderr='Ran 70 tests\nOK (skipped=5)\n')
+            with patch.object(CI.subprocess,'run',return_value=fake):
+                row=CI.run_case('public_component_tests',['ignored'],'component')
+        self.assertFalse(row['passed'])
+
+    def test_component_receipt_with_wrong_summary_count_blocks(self):
+        skipped=CI.expected_component_skips()
+        fake=subprocess.CompletedProcess(['python'],0,
+            stdout='MAESTRO_COMPONENT_TEST_RESULT_V1='+json.dumps({
+                 'schema':'MAESTRO_COMPONENT_TEST_RESULT_V1','tests_run':71,
+                 'errors':0,'failures':0,'skipped':skipped,'was_successful':True})+'\n',
+            stderr='Ran 70 tests\nOK'+(f' (skipped={len(skipped)})' if skipped else '')+'\n')
+        with patch.object(CI.subprocess,'run',return_value=fake):
+            row=CI.run_case('public_component_tests',['ignored'],'component')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['skip_inventory_status'], 'COMPONENT_SKIP_INVENTORY_INCONSISTENT')
+
+    def test_contradictory_coordinator_summary_is_not_green(self):
+        fake=subprocess.CompletedProcess(['python'],0,stdout='',
+              stderr='Ran 79 tests\nOK\nFAILED (failures=1)\n')
+        with patch.object(CI.subprocess,'run',return_value=fake):
+            row=CI.run_case('coordinator_tests',['ignored'],'coordinator')
+        self.assertFalse(row['passed'])
+
+    def test_component_clean_receipt_matches_known_optional_skips(self):
+        with patch.object(CI.importlib.util, 'find_spec', return_value=None):
+            row=self.simulate('public_component_tests','component',
+                              'Ran 70 tests\nOK (skipped=5)\n')
+        self.assertTrue(row['passed'])
+        self.assertEqual(row['skip_inventory_status'], 'COMPONENT_SKIP_IDENTITIES_VERIFIED')
 
     def test_all_skipped_coordinator_is_not_a_pass(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 79 tests\nOK (skipped=79)\n")
