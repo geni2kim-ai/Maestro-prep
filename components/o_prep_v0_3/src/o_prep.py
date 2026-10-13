@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -85,6 +86,15 @@ def _is_safe_member(info: zipfile.ZipInfo) -> bool:
     return True
 
 
+def _nonnegative_counts(record: Any, keys: tuple[str, ...], code: str) -> JsonDict:
+    """Reject booleans and negative producer counters before any comparisons."""
+    if not isinstance(record, dict) or any(
+        type(record.get(key)) is not int or record[key] < 0 for key in keys
+    ):
+        raise OPrepError(code)
+    return record
+
+
 def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) -> JsonDict:
     """Audit transported SUBJECT evidence bytes. Report local evidence discrepancies only.
 
@@ -92,12 +102,19 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     the reported router/test/host assertions remain PRODUCER_REPORTED.
     """
     path = Path(zip_path)
-    if not path.is_file():
+    if not path.is_file() or is_link(path):
         raise OPrepError("evidence_file_missing")
-    if path.stat().st_size > MAX_UNCOMPRESSED:
+    # Hash and inspect the SAME bounded bytes. Reopening a path for ZipFile
+    # could silently inspect different bytes after an adversarial replacement.
+    with path.open("rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if not stat.S_ISREG(opened.st_mode):
+            raise OPrepError("evidence_file_not_regular")
+        archive_bytes = stream.read(MAX_UNCOMPRESSED + 1)
+    if len(archive_bytes) > MAX_UNCOMPRESSED:
         raise OPrepError("zip_file_too_large")
-    archive_hash = _sha256(path.read_bytes())
-    with zipfile.ZipFile(path) as z:
+    archive_hash = _sha256(archive_bytes)
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as z:
         members = z.infolist()
         if len(members) > MAX_ZIP_MEMBERS or len(members) < 2:
             raise OPrepError("archive_member_count_invalid")
@@ -179,12 +196,18 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     sent = sum(row.get("sender_node_id") == "SUBJECT" for row in rows)
     received = sum(row.get("receiver_node_id") == "SUBJECT" for row in rows)
     observed_lifetime = {"sent": sent, "received": received, "deliveries": len(rows)}
-    reported = snapshot["packet_metrics_lifetime"]
+    reported = _nonnegative_counts(snapshot["packet_metrics_lifetime"],
+                                   ("packets_sent_by_subject", "packets_received_by_subject",
+                                    "packet_deliveries_involving_subject"),
+                                   "invalid_lifetime_metric_counts")
     if ((sent, received, len(rows)) !=
        (reported["packets_sent_by_subject"], reported["packets_received_by_subject"], reported["packet_deliveries_involving_subject"])):
         flag("LIFETIME_METRIC_MISMATCH", "hold_evidence", "Reported totals differ from supplied ledger")
 
-    window = snapshot["packet_metrics_72h_window"]
+    window = _nonnegative_counts(snapshot["packet_metrics_72h_window"],
+                                 ("packets_sent_by_subject", "packets_received_by_subject",
+                                  "total_packets_in_window"),
+                                 "invalid_window_metric_counts")
     start = _utc(window["window_start_utc"])
     end = _utc(window["window_end_utc"])
     if end <= start:
@@ -208,13 +231,20 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
         flag("WINDOW_LEDGER_MISMATCH", "hold_evidence",
              "Reported window totals differ from raw recorded timestamps; historically malformed timestamps are not silently corrected")
 
-    test_baseline = snapshot["regression_test_baseline"]
+    test_baseline = _nonnegative_counts(snapshot["regression_test_baseline"],
+                                        ("passed", "skipped", "failures",
+                                         "errors", "total_tests"),
+                                        "invalid_test_baseline_counts")
     count_ok = (test_baseline["passed"] + test_baseline["skipped"] +
                 test_baseline["failures"] + test_baseline["errors"] == test_baseline["total_tests"])
     if not count_ok:
         flag("TEST_COUNT_INCONSISTENT", "hold_evidence", "Reported test arithmetic inconsistent")
     test_suites = receipts["test_suites"]
-    if not any(s.get("total_tests") == test_baseline["total_tests"] for s in test_suites):
+    if not isinstance(test_suites, list):
+        raise OPrepError("invalid_test_suite_shape")
+    for suite in test_suites:
+        _nonnegative_counts(suite, ("total_tests",), "invalid_test_suite_counts")
+    if not any(s["total_tests"] == test_baseline["total_tests"] for s in test_suites):
         flag("MISSING_CANONICAL_RECEIPT", "hold_evidence", "Canonical reported test count lacks matching suite summary")
     # A delivered receipt is a producer assertion, not a raw runner transcript.
     flag("RAW_HOST_VALIDATION_NOT_TRANSPORTED", "info", "Unit-test and router pass counts are SUBJECT reported; host executable and runner output not transported")

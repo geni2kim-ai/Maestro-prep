@@ -1,6 +1,7 @@
 """V0.3 adversarial tests on synthetic data; cannot certify a production node."""
 import copy
 import hashlib
+import io
 import json
 from contextlib import redirect_stderr
 from io import StringIO
@@ -362,5 +363,91 @@ class R122MalformedInputTests(unittest.TestCase):
         self.assertEqual(message["reason"], "malformed_input_or_io")
         self.assertNotIn(secret, stderr.getvalue())
 
+
+
+class R123TransportSnapshotAndCountsTests(unittest.TestCase):
+    def _mutate_archive(self, path, name, update):
+        zipfile = __import__('zipfile')
+        with zipfile.ZipFile(path) as z:
+            files = {n: z.read(n) for n in z.namelist()}
+        record = json.loads(files[name])
+        update(record)
+        files[name] = json.dumps(record).encode()
+        manifest = json.loads(files['manifest.json'])
+        row = next(x for x in manifest['entries'] if x['relative_path'] == name)
+        row['size_bytes'] = len(files[name])
+        row['sha256'] = hashlib.sha256(files[name]).hexdigest()
+        files['manifest.json'] = json.dumps(manifest).encode()
+        with zipfile.ZipFile(path, 'w') as z:
+            for n, payload in files.items():
+                z.writestr(n, payload)
+
+    def test_archive_hash_is_the_exact_immutable_snapshot_audited(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.zip'
+            ArchiveAuditTests().make_archive(path)
+            original_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual_zipfile = __import__('zipfile').ZipFile
+            seen = []
+            def replace_path_during_archive_open(source, *args, **kwargs):
+                seen.append(type(source).__name__)
+                self.assertIsInstance(source, io.BytesIO)
+                # Change on-disk archive after its snapshot was hashed.
+                path.write_bytes(b'CORRUPTED_AFTER_SNAPSHOT')
+                return actual_zipfile(source, *args, **kwargs)
+            with patch('o_prep.zipfile.ZipFile',
+                       side_effect=replace_path_during_archive_open):
+                report = audit_transport_bundle(str(path))
+            self.assertEqual(seen, ['BytesIO'])
+            self.assertEqual(report['archive_sha256'], original_sha)
+            self.assertTrue(report['manifest_verified'])
+
+    def test_boolean_and_negative_packet_counters_are_not_valid(self):
+        scenarios = (
+            ('packet_metrics_lifetime', 'packets_sent_by_subject', True,
+             'invalid_lifetime_metric_counts'),
+            ('packet_metrics_lifetime', 'packets_received_by_subject', -1,
+             'invalid_lifetime_metric_counts'),
+            ('packet_metrics_72h_window', 'total_packets_in_window', True,
+             'invalid_window_metric_counts'),
+        )
+        for section, key, value, expected in scenarios:
+            with self.subTest(section=section, key=key, value=value):
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / 'synthetic.zip'
+                    ArchiveAuditTests().make_archive(path)
+                    self._mutate_archive(path, 'node_snapshot.json',
+                        lambda record: record[section].__setitem__(key, value))
+                    with self.assertRaisesRegex(OPrepError, expected):
+                        audit_transport_bundle(str(path))
+
+    def test_test_counter_arithmetic_rejects_bool_and_negative(self):
+        variants = (
+            ('passed', True),
+            ('passed', -1),
+        )
+        for field, value in variants:
+            with self.subTest(field=field, value=value):
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / 'synthetic.zip'
+                    ArchiveAuditTests().make_archive(path)
+                    def alter(record):
+                        record['regression_test_baseline'][field] = value
+                        if value == -1:
+                            record['regression_test_baseline']['failures'] = 2
+                    self._mutate_archive(path, 'node_snapshot.json', alter)
+                    with self.assertRaisesRegex(OPrepError, 'invalid_test_baseline_counts'):
+                        audit_transport_bundle(str(path))
+
+    def test_receipt_test_suite_count_must_be_nonnegative_int(self):
+        for bad in (True, -1, None):
+            with self.subTest(bad=bad):
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / 'synthetic.zip'
+                    ArchiveAuditTests().make_archive(path)
+                    self._mutate_archive(path, 'test_receipts.json',
+                        lambda record: record['test_suites'][0].__setitem__('total_tests', bad))
+                    with self.assertRaisesRegex(OPrepError, 'invalid_test_suite_counts'):
+                        audit_transport_bundle(str(path))
 
 if __name__=='__main__':unittest.main()
