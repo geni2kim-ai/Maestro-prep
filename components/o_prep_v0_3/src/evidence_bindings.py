@@ -85,7 +85,8 @@ def _safe_local_file(root: Path, relative: str) -> Path:
     p = PurePosixPath(relative)
     if p.is_absolute() or relative.startswith("./") or re.match(r"^[A-Za-z]:", relative):
         raise BindingError("unsafe_receipt_path")
-    if any(x in {".", "..", ""} or x.endswith((" ", ".")) for x in relative.split("/")):
+    if any(x in {".", "..", ""} or x.endswith((" ", ".")) or ":" in x
+           or any(ord(ch) < 32 for ch in x) for x in relative.split("/")):
         raise BindingError("unsafe_receipt_path")
     candidate = root
     for segment in p.parts:

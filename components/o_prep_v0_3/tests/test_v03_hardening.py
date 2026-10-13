@@ -19,7 +19,7 @@ sys.path.insert(0,str(ROOT/'src'))
 sys.path.insert(0,str(ROOT/'tests'))
 from o_prep import (OPrepError, _read_json, _secure_out_file, audit_transport_bundle,
                     evaluate_signal, evaluate_bound_signal, validate_signal, _main)
-from evidence_bindings import BindingError, is_link, verify_local_bindings, _json as binding_json
+from evidence_bindings import BindingError, is_link, verify_local_bindings, _json as binding_json, _safe_local_file
 from test_o_prep import signal, ArchiveAuditTests
 try:
     from jsonschema import Draft202012Validator, ValidationError
@@ -449,5 +449,71 @@ class R123TransportSnapshotAndCountsTests(unittest.TestCase):
                         lambda record: record['test_suites'][0].__setitem__('total_tests', bad))
                     with self.assertRaisesRegex(OPrepError, 'invalid_test_suite_counts'):
                         audit_transport_bundle(str(path))
+
+
+class R124CrossPlatformEvidenceContractTests(unittest.TestCase):
+    def test_zip_member_ambiguous_alias_is_rejected_before_manifest(self):
+        for name in ("evidence//alias.dat", "evidence/file:stream",
+                     "evidence/trailing.", "evidence/trailing ",
+                     "evidence/bad\\nname.dat"):
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temp:
+                    archive = Path(temp) / "alias.zip"
+                    ArchiveAuditTests().make_archive(archive, unsafe_member=name)
+                    with self.assertRaisesRegex(OPrepError, "unsafe_archive_member"):
+                        audit_transport_bundle(str(archive))
+
+    def test_receipt_ntfs_ads_and_control_character_rejected_pre_open(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("evidence/claim:ads", "evidence/invalid\\nname.dat",
+                         "evidence//alias", "evidence/trailing."):
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(BindingError, "unsafe_receipt_path"):
+                        _safe_local_file(root, name)
+
+    def test_required_archive_document_must_be_object_not_list(self):
+        for filename in ("node_snapshot.json", "router_policy_manifest.json",
+                         "packet_reconciliation.json", "test_receipts.json",
+                         "open_gates.json", "evidence_ledger.json"):
+            with self.subTest(file=filename):
+                with tempfile.TemporaryDirectory() as temp:
+                    archive = Path(temp) / "evidence.zip"
+                    ArchiveAuditTests().make_archive(archive)
+                    R123TransportSnapshotAndCountsTests()._mutate_archive(
+                        archive, filename, lambda record: None)
+                    # Replace the payload with an actual JSON list and re-pin
+                    # its manifest entry, retaining all other required bytes.
+                    with __import__('zipfile').ZipFile(archive) as z:
+                        files = {n: z.read(n) for n in z.namelist()}
+                    files[filename] = b'[]'
+                    manifest = json.loads(files["manifest.json"])
+                    row = next(x for x in manifest["entries"]
+                               if x["relative_path"] == filename)
+                    row["size_bytes"] = 2
+                    row["sha256"] = hashlib.sha256(b'[]').hexdigest()
+                    files["manifest.json"] = json.dumps(manifest).encode()
+                    with __import__('zipfile').ZipFile(archive, 'w') as z:
+                        for name, payload in files.items():
+                            z.writestr(name, payload)
+                    with self.assertRaisesRegex(OPrepError, "evidence_shape_invalid"):
+                        audit_transport_bundle(str(archive))
+
+    def test_nested_archive_object_contracts_are_checked(self):
+        variants = (
+            ("node_snapshot.json", lambda x: x.__setitem__("queue_status_disk", [])),
+            ("router_policy_manifest.json", lambda x: x.__setitem__("installed_router", [])),
+            ("open_gates.json", lambda x: x.__setitem__("gates", [123])),
+            ("evidence_ledger.json", lambda x: x.__setitem__("claims", {})),
+        )
+        for filename, mutation in variants:
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as temp:
+                    archive = Path(temp) / "nested.zip"
+                    ArchiveAuditTests().make_archive(archive)
+                    R123TransportSnapshotAndCountsTests()._mutate_archive(
+                        archive, filename, mutation)
+                    with self.assertRaisesRegex(OPrepError, "evidence_shape_invalid"):
+                        audit_transport_bundle(str(archive))
 
 if __name__=='__main__':unittest.main()

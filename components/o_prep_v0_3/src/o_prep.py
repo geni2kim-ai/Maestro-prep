@@ -76,9 +76,13 @@ def _is_safe_member(info: zipfile.ZipInfo) -> bool:
     if not isinstance(name, str) or not name or "\\" in name or "\x00" in name:
         return False
     path = PurePosixPath(name)
-    if path.is_absolute() or name.startswith(("/", "./")) or any(p in {"..", "."} for p in name.split("/")):
-        return False
-    if re.match(r"^[a-zA-Z]:", name):
+    # Reject lexically ambiguous aliases rather than relying on PurePosixPath
+    # normalization. Colon is an NTFS alternate data stream separator.
+    segments = name.split("/")
+    if (path.is_absolute() or name.startswith(("/", "./"))
+            or any(segment in {"", ".", ".."} or segment.endswith((" ", "."))
+                   or ":" in segment or any(ord(ch) < 32 for ch in segment)
+                   for segment in segments)):
         return False
     mode = (info.external_attr >> 16) & 0xFFFF
     if stat.S_IFMT(mode) == stat.S_IFLNK:
@@ -171,7 +175,22 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     branch_probes = _read_json(content["branch_probes.json"], "branch_probes")
     episodes = _read_json(content["episodes.json"], "episodes")
     evidence_ledger = _read_json(content["evidence_ledger.json"], "evidence_ledger")
-    if any(not isinstance(item, list) for item in (branch_probes, episodes)) or not isinstance(ledger, dict):
+    if (any(not isinstance(item, list) for item in (branch_probes, episodes))
+            or any(not isinstance(item, dict) for item in
+                   (snapshot, router, ledger, receipts, gates, evidence_ledger))):
+        raise OPrepError("evidence_shape_invalid")
+    if (any(not isinstance(snapshot.get(key), dict) for key in
+            ("packet_metrics_lifetime", "packet_metrics_72h_window",
+             "regression_test_baseline"))
+            or not isinstance(router.get("installed_router", {}), dict)
+            or not isinstance(receipts.get("test_suites"), list)
+            or not isinstance(gates.get("gates", []), list)
+            or not all(isinstance(item, dict) for item in gates.get("gates", []))
+            or not isinstance(evidence_ledger.get("claims", []), list)):
+        raise OPrepError("evidence_shape_invalid")
+    queue_meta = snapshot.get("queue_status_disk", {})
+    if (not isinstance(queue_meta, dict)
+            or not isinstance(queue_meta.get("incoming", {}), dict)):
         raise OPrepError("evidence_shape_invalid")
 
     findings: list[dict[str, str]] = []
