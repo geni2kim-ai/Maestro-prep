@@ -97,12 +97,12 @@ jobs:
       - name: Install fixed YAML decoder for official policy engine
         run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
       - name: Test upstream policy-engine pins and integration behavior
-        run: python -I -m unittest discover -s .github/scripts -p test_codediff_shadow.py -q
+        run: python -I -B -m unittest discover -s .github/scripts -p test_codediff_shadow.py -q
       - name: Run official policy engine as degraded SHADOW on PR diff
         shell: bash
         run: |
           set -euo pipefail
-          python -I .github/scripts/codediff_shadow.py \
+          python -I -B .github/scripts/codediff_shadow.py \
             --repo . \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}" \
