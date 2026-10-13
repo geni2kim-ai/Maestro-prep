@@ -211,6 +211,47 @@ class CIAccountingTests(unittest.TestCase):
         self.assertTrue(row['passed'])
         self.assertEqual(row['test_identity_status'], 'CI_GUARD_TEST_IDENTITIES_VERIFIED')
 
+    def test_ci_guard_source_pin_matches_current_checkout(self):
+        matched, digest = CI.check_ci_guard_source(CI.ROOT)
+        self.assertTrue(matched)
+        self.assertEqual(digest, CI.CI_GUARD_SOURCE_PIN_SHA256)
+
+    def test_ci_guard_source_pin_detects_neutralized_body(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            target = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
+            target.parent.mkdir(parents=True)
+            source = PATH.read_bytes()
+            target.write_bytes(source.replace(
+                b'def test_contradictory_coordinator_summary_is_not_green',
+                b'def test_contradictory_coordinator_summary_is_noop', 1))
+            matched, digest = CI.check_ci_guard_source(root)
+            self.assertFalse(matched)
+            self.assertNotEqual(digest, CI.CI_GUARD_SOURCE_PIN_SHA256)
+
+    def test_ci_guard_source_pin_blocks_missing_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            matched, digest = CI.check_ci_guard_source(Path(folder))
+        self.assertFalse(matched)
+        self.assertEqual(digest, 'NOT_VERIFIED')
+
+    def test_ci_guard_source_pin_blocks_symlink_source(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            target = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
+            target.parent.mkdir(parents=True)
+            target.write_bytes(PATH.read_bytes())
+            # Symlink simulation is deterministic and does not ask Windows
+            # users to create a privileged real reparse point.
+            with patch.object(Path, 'is_symlink', autospec=True,
+                              side_effect=lambda p: p == target):
+                matched, digest = CI.check_ci_guard_source(root)
+        self.assertFalse(matched)
+        self.assertEqual(digest, 'NOT_VERIFIED')
+
     def test_all_skipped_coordinator_is_not_a_pass(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 79 tests\nOK (skipped=79)\n")
         self.assertFalse(item["passed"])

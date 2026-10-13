@@ -2,6 +2,7 @@
 """Fail-closed, self-contained main-profile CI; no host execution or reviewer authority."""
 from __future__ import annotations
 import json
+import hashlib
 import importlib.util
 import os
 import re
@@ -67,6 +68,10 @@ CI_GUARD_EXPECTED_IDS = (
     'test_ci_guard_exact_identity_inventory_is_accepted',
     'test_ci_guard_no_names_with_matching_count_is_blocked',
     'test_ci_guard_replaced_required_identity_is_blocked',
+    'test_ci_guard_source_pin_blocks_missing_file',
+    'test_ci_guard_source_pin_blocks_symlink_source',
+    'test_ci_guard_source_pin_detects_neutralized_body',
+    'test_ci_guard_source_pin_matches_current_checkout',
     'test_clean_coordinator_with_no_skips_passes',
     'test_component_clean_receipt_matches_known_optional_skips',
     'test_component_opaque_skips_cannot_gain_a_green_by_count',
@@ -103,6 +108,25 @@ def check_ci_guard_trace(stderr: str, count: int) -> tuple[bool, str]:
     return (verified, 'CI_GUARD_TEST_IDENTITIES_VERIFIED' if verified
             else 'CI_GUARD_TEST_IDENTITIES_UNEXPECTED')
 
+# SHA256 of the complete, reviewed CI-accounting implementation bytes.
+# Test method names alone are insufficient: disabled test bodies can print OK.
+# This literal pin is candidate-owned and does NOT constitute a trusted
+# external signature. Independent diff/HUMAN review must approve pin updates.
+CI_GUARD_SOURCE_PIN_SHA256 = "ed68940d05d2599e2fc5b4e0052ec278c9fba3d0ce22eca106a3b6044e568043"
+
+def check_ci_guard_source(root: Path) -> tuple[bool, str]:
+    source = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
+    try:
+        if source.is_symlink() or not source.is_file():
+            return False, 'NOT_VERIFIED'
+        raw = source.read_bytes()
+        if len(raw) > 1024 * 1024:
+            return False, 'NOT_VERIFIED'
+        digest = hashlib.sha256(raw).hexdigest()
+        return digest == CI_GUARD_SOURCE_PIN_SHA256, digest
+    except (OSError, ValueError):
+        return False, 'NOT_VERIFIED'
+
 CASES = (
     ('release_inventory', ['tools/verify_package.py', '.'], 'package'),
     ('public_privacy', ['tools/public_privacy_check.py'], 'privacy'),
@@ -124,6 +148,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         temp = base / 'maestro-prep-main-ci'
         temp.mkdir(parents=True, exist_ok=True)
         env.update(TEMP=str(temp), TMP=str(temp), TMPDIR=str(temp))
+    source_before = check_ci_guard_source(ROOT) if kind == 'ci_guard_tests' else None
     # Only Windows requires per-test skip provenance. A summary count is not
     # evidence that the two known symlink-dependent cases were skipped.
     actual_args = list(args)
@@ -173,7 +198,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         # floor of seven silently allowed thirteen required tests to vanish.
         minimum = {
             'coordinator': 79, 'component': 70, 'release_tests': 6,
-            'external_gate_tests': 9, 'ci_guard_tests': 27,
+            'external_gate_tests': 9, 'ci_guard_tests': 31,
         }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
@@ -190,7 +215,14 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         if kind == 'ci_guard_tests':
             verified, reason = check_ci_guard_trace(proc.stderr, count)
             details['test_identity_status'] = reason
-            passed = passed and verified
+            source_after = check_ci_guard_source(ROOT)
+            details['source_pin_status'] = (
+                'CI_GUARD_SOURCE_BYTES_VERIFIED'
+                if source_before is not None and source_before[0]
+                and source_after[0] and source_before[1] == source_after[1]
+                else 'CI_GUARD_SOURCE_PIN_MISMATCH'
+            )
+            passed = passed and verified and details['source_pin_status'] == 'CI_GUARD_SOURCE_BYTES_VERIFIED'
         if kind == 'coordinator' and HOST_IS_WINDOWS and details['skipped']:
             # unittest -v names each skipped case; do not infer the reason
             # merely from the total summary count. This is an
