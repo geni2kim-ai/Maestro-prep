@@ -4,6 +4,8 @@ import json
 import subprocess
 import unittest
 from pathlib import Path
+from contextlib import redirect_stdout
+from io import StringIO
 import os
 import sys
 import tempfile
@@ -435,6 +437,48 @@ class CIAccountingTests(unittest.TestCase):
                                        capture_output=True, text=True, check=True)
             self.assertEqual(protected.stdout.strip(), '1')
 
+
+    def test_case_registry_exact_identity_and_argv(self):
+        self.assertEqual(CI.EXPECTED_CASE_COUNT, 9)
+        self.assertEqual(CI.CASES_PIN_SHA256, 'c890a85a663ad2279c9bdaf4f8fcaf71793cf740ede2b62d0541da24b908dab1')
+        self.assertTrue(CI.check_case_registry(CI.CASES))
+
+    def test_case_registry_missing_or_empty_is_blocked(self):
+        for candidate in (CI.CASES[:-1], (), CI.CASES[1:]):
+            with self.subTest(count=len(candidate)):
+                with (patch.object(CI, 'CASES', candidate),
+                      patch.object(CI, 'run_case') as child,
+                      redirect_stdout(StringIO()) as output):
+                    code = CI.main()
+                child.assert_not_called()
+                report = json.loads(output.getvalue())
+                self.assertEqual(code, 2)
+                self.assertEqual(report['total'], 9)
+                self.assertEqual(report['passed'], 0)
+                self.assertEqual(report['case_registry_status'],
+                                 'CI_CASE_REGISTRY_MISMATCH')
+                self.assertEqual(report['checks'][0]['issue_code'],
+                                 'CI_CASE_REGISTRY_MISMATCH')
+
+    def test_case_registry_duplicate_or_mutated_command_blocked(self):
+        duplicate = list(CI.CASES)
+        duplicate[-1] = CI.CASES[0]
+        changed_arg = list(CI.CASES)
+        name, argv, kind = changed_arg[2]
+        changed_arg[2] = (name, list(argv) + ['--ignored'], kind)
+        changed_kind = list(CI.CASES)
+        name, argv, kind = changed_kind[4]
+        changed_kind[4] = (name, list(argv), 'replay')
+        for candidate in (tuple(duplicate), tuple(changed_arg), tuple(changed_kind)):
+            with self.subTest(candidate=candidate):
+                self.assertFalse(CI.check_case_registry(candidate))
+                with (patch.object(CI, 'CASES', candidate),
+                      patch.object(CI, 'run_case') as child,
+                      redirect_stdout(StringIO()) as output):
+                    code = CI.main()
+                self.assertEqual(code, 2)
+                child.assert_not_called()
+                self.assertEqual(json.loads(output.getvalue())['total'], 9)
 
 if __name__ == "__main__":
     unittest.main()

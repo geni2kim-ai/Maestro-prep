@@ -60,7 +60,7 @@ def check_component_receipt(stdout: str, count: int, skipped: int) -> tuple[bool
         return False, 'COMPONENT_SKIP_IDENTITIES_UNEXPECTED'
     return True, 'COMPONENT_SKIP_IDENTITIES_VERIFIED'
 
-# All 38 required accounting test identities: same-count substitutions reject.
+# All 41 required accounting test identities: same-count substitutions reject.
 # These are candidate-owned guardrails, NOT third-party verification.
 CI_GUARD_EXPECTED_IDS = (
     'test_all_skipped_coordinator_is_not_a_pass',
@@ -70,6 +70,9 @@ CI_GUARD_EXPECTED_IDS = (
     'test_ci_guard_no_names_with_matching_count_is_blocked',
     'test_grandchild_shadow_import_before_after_environment_scrub',
     'test_cache_prefix_is_fresh_for_each_child',
+    'test_case_registry_exact_identity_and_argv',
+    'test_case_registry_missing_or_empty_is_blocked',
+    'test_case_registry_duplicate_or_mutated_command_blocked',
     'test_ci_launch_forces_python_cache_prefix',
     'test_ci_guard_replaced_required_identity_is_blocked',
     'test_ci_launch_ignores_inherited_python_environment',
@@ -120,7 +123,7 @@ def check_ci_guard_trace(stderr: str, count: int) -> tuple[bool, str]:
 # Test method names alone are insufficient: disabled test bodies can print OK.
 # This literal pin is candidate-owned and does NOT constitute a trusted
 # external signature. Independent diff/HUMAN review must approve pin updates.
-CI_GUARD_SOURCE_PIN_SHA256 = "8acb8276f9fc255e98d4ff90611b3c8be494284c268a8a2a07d2436d5586cdf3"
+CI_GUARD_SOURCE_PIN_SHA256 = "4e59326682a1a1db305a7b90bf8d62d94d770bbfb017b2f2e04282f0f10b72ca"
 
 def check_ci_guard_source(root: Path) -> tuple[bool, str]:
     source = root / '.github' / 'scripts' / 'test_main_ci_contract.py'
@@ -146,6 +149,25 @@ CASES = (
     ('external_gate_synthetic_tests', ['-m', 'unittest', 'discover', '-s', '.github/scripts', '-p', 'test_external_conformance_gate.py', '-q'], 'external_gate_tests'),
     ('ci_receipt_accounting_tests', ['-m', 'unittest', 'discover', '-s', '.github/scripts', '-p', 'test_main_ci_contract.py', '-q'], 'ci_guard_tests'),
 )
+
+# Complete fixed identity/argv/kind contract for the nine mandatory checks.
+# SHA is reviewed-candidate-owned integrity evidence, not a trusted signature.
+EXPECTED_CASE_COUNT = 9
+CASES_PIN_SHA256 = 'c890a85a663ad2279c9bdaf4f8fcaf71793cf740ede2b62d0541da24b908dab1'
+
+def check_case_registry(cases: object) -> bool:
+    try:
+        if type(cases) is not tuple or len(cases) != EXPECTED_CASE_COUNT:
+            return False
+        if any(type(row) is not tuple or len(row) != 3
+               or type(row[0]) is not str or type(row[1]) is not list
+               or type(row[2]) is not str or
+               any(type(arg) is not str for arg in row[1]) for row in cases):
+            return False
+        data = json.dumps(cases, ensure_ascii=True, separators=(',', ':'))
+        return hashlib.sha256(data.encode('utf-8')).hexdigest() == CASES_PIN_SHA256
+    except (TypeError, ValueError, UnicodeError, RecursionError):
+        return False
 
 def run_case(name: str, args: list[str], kind: str) -> dict:
     # -E protects one interpreter; a non--E grandchild would still inherit PYTHONPATH.
@@ -215,7 +237,7 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         # floor of seven silently allowed thirteen required tests to vanish.
         minimum = {
             'coordinator': 79, 'component': 70, 'release_tests': 6,
-            'external_gate_tests': 9, 'ci_guard_tests': 38,
+            'external_gate_tests': 9, 'ci_guard_tests': 41,
         }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
@@ -274,24 +296,33 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
     return receipt
 
 def main() -> int:
+    # Fail before executing children if any case was removed or substituted.
+    registry_ok = check_case_registry(CASES)
     results = []
-    for name, args, kind in CASES:
-        print('START ' + name, file=sys.stderr, flush=True)
-        try:
-            results.append(run_case(name, args, kind))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            results.append({'name': name, 'passed': False,
-                            'diagnostic': type(exc).__name__})
+    if not registry_ok:
+        results.append({'name': 'ci_case_registry', 'passed': False,
+                        'issue_code': 'CI_CASE_REGISTRY_MISMATCH'})
+    else:
+        for name, args, kind in CASES:
+            print('START ' + name, file=sys.stderr, flush=True)
+            try:
+                results.append(run_case(name, args, kind))
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                results.append({'name': name, 'passed': False,
+                                'diagnostic': type(exc).__name__})
     report = {
         'schema': 'MAESTRO_MAIN_PUBLIC_OFFLINE_CI_V1',
         'candidate_only': True, 'version': '0.1.0-public-redacted-hotfix',
         'approved_planning_host': 'NOT_RUN', 'actual_router': 'NOT_RUN',
         'independent_review': 'NOT_RUN', 'deployment_authorized': False,
+        'case_registry_status': ('CI_CASE_REGISTRY_VERIFIED' if registry_ok
+                                 else 'CI_CASE_REGISTRY_MISMATCH'),
         'checks': results, 'passed': sum(x['passed'] for x in results),
-        'total': len(results),
+        'total': EXPECTED_CASE_COUNT,
     }
     print(json.dumps(report, sort_keys=True, indent=2))
-    return 0 if report['passed'] == report['total'] else 2
+    return (0 if registry_ok and len(results) == EXPECTED_CASE_COUNT
+            and report['passed'] == EXPECTED_CASE_COUNT else 2)
 
 if __name__ == '__main__':
     raise SystemExit(main())
