@@ -35,6 +35,17 @@ OVERLAY = {
     "supply_chain_files": [],
 }
 SHA = re.compile(r"^[0-9a-f]{40}$")
+# Byte-level provenance locked to the inspected v2.5 upstream reference.
+# The candidate (including this file) is not a trusted reviewer; this detects
+# accidental/partial pin tampering, not malicious redefinition of the checker.
+CODEDIFF_UPSTREAM_REF = "69a49faa35b56d48e9e3067e5f484b443735df67"
+CODEDIFF_UPSTREAM_REPO = "geni2kim-ai/PR-with-codediff-finder"
+TRUSTED_VENDOR_BLOBS = {
+    ".github/review_tools/codediff_v25/policy_engine.py": "b1466919d765d0b905ba1ba4447efddf87099efb",
+    ".github/review_tools/codediff_v25/protected-paths.yml": "9abc44dd8d390fc6cb9f6c11d0224e779d6362bb",
+    ".github/review_tools/codediff_v25/escalation-policy.yml": "85f6026a41d83490dc267ead5bfc8a170f881377",
+    ".github/review_tools/codediff_v25/sensor-policy.yml": "6f79fd4ec7e5b9f0947cb4cf086ab26c7f4c3640",
+}
 
 
 def git(repo: Path, *args: str) -> str:
@@ -42,7 +53,8 @@ def git(repo: Path, *args: str) -> str:
         "USERPROFILE", "TEMP", "TMP", "TMPDIR") if k in os.environ}
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
                GIT_TERMINAL_PROMPT="0")
-    result = subprocess.run(["git", "-C", str(repo), *args], cwd=repo,
+    result = subprocess.run(["git", "-c", "core.fsmonitor=false",
+                             "-c", "diff.external=", "-C", str(repo), *args], cwd=repo,
                             env=env, capture_output=True, check=False,
                             timeout=40)
     if result.returncode:
@@ -52,7 +64,8 @@ def git(repo: Path, *args: str) -> str:
 
 def git_status(repo: Path, base: str, head: str) -> list[str]:
     # Git's NUL format is safe for renames and filenames with whitespace.
-    raw = git(repo, "diff", "--name-status", "-z", "-M", base, head)
+    raw = git(repo, "diff", "--no-ext-diff", "--no-textconv",
+              "--name-status", "-z", "-M", base, head)
     tokens = raw.split("\0")
     if tokens[-1] == "":
         tokens.pop()
@@ -90,16 +103,33 @@ def trusted_source_snapshot() -> tuple[dict[str, Any], Any]:
             or pins["codediff"]["trusted_textdiff_sensor"] is not False
             or pins["leonardo"]["promoted_to_mandatory_runtime"] is not False):
         raise ValueError("UNAUTHORIZED_REVIEW_OR_LEONARDO_PROMOTION")
+    if (pins["codediff"].get("repo") != CODEDIFF_UPSTREAM_REPO
+            or pins["codediff"].get("source_commit") != CODEDIFF_UPSTREAM_REF
+            or pins["codediff"].get("independent_review") != "NOT_RUN"
+            or pins.get("authority") != "NONE"
+            or pins.get("candidate_only") is not True):
+        raise ValueError("UNTRUSTED_UPSTREAM_SOURCE_DESCRIPTOR")
     paths = pins["codediff"]["upstream_files"]
-    if len(paths) != 4:
+    if (not isinstance(paths, list) or len(paths) != len(TRUSTED_VENDOR_BLOBS)
+            or any(not isinstance(x, dict) for x in paths)):
         raise ValueError("UPSTREAM_PINSET_INVALID")
+    seen: set[str] = set()
     for item in paths:
-        target = ROOT / item["dest"]
-        if not target.is_file() or target.is_symlink():
+        dest = item.get("dest")
+        if (not isinstance(dest, str) or dest in seen
+                or item.get("source_git_blob") != TRUSTED_VENDOR_BLOBS.get(dest)):
+            raise ValueError("UNTRUSTED_UPSTREAM_SOURCE_DESCRIPTOR")
+        seen.add(dest)
+        target = ROOT / dest
+        # Reject a symlink in any parent directory, not only a linked file.
+        if (not target.is_file() or target.is_symlink()
+                or target.resolve() != target.absolute()):
             raise ValueError("REVIEW_VENDOR_SOURCE_MISSING")
         data = target.read_bytes()
-        if object_id(data) != item["source_git_blob"]:
+        if object_id(data) != TRUSTED_VENDOR_BLOBS[dest]:
             raise ValueError("UPSTREAM_SOURCE_PIN_MISMATCH")
+    if seen != set(TRUSTED_VENDOR_BLOBS):
+        raise ValueError("UPSTREAM_PINSET_INVALID")
     path = VENDOR / "policy_engine.py"
     spec = importlib.util.spec_from_file_location("_pinned_pr_codediff_policy_engine_v25", path)
     if spec is None or spec.loader is None:
@@ -116,6 +146,10 @@ def analyze(repo: Path, base: str, head: str) -> dict[str, Any]:
         raise ValueError("STALE_HEAD")
     if git(repo, "merge-base", base, head).strip() != base:
         raise ValueError("BASE_NOT_ANCESTOR")
+    # A clean HEAD hash alone says nothing about modified or untracked files
+    # loaded by the current runner. Refuse to review a nonreproducible workspace.
+    if git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all"):
+        raise ValueError("DIRTY_REVIEW_WORKTREE")
     pins, engine = trusted_source_snapshot()
     paths = git_status(repo, base, head)
     if not paths:
@@ -176,7 +210,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         path = ns.out.absolute()
         root = ns.repo.resolve(strict=True)
-        if path.exists() or not path.parent.is_dir() or path.is_relative_to(root):
+        parent = path.parent.resolve(strict=True)
+        # Resolve *before* open; a symlinked directory may point back into the
+        # source root even when the lexical --out starts outside it.
+        if (path.exists() or path.is_symlink() or not path.parent.is_dir()
+                or path.resolve(strict=False).is_relative_to(root)
+                or parent.is_relative_to(root)):
             raise ValueError("REVIEW_OUTPUT_INVALID")
         report = analyze(root, ns.base, ns.head)
         with path.open("x", encoding="utf-8") as handle:

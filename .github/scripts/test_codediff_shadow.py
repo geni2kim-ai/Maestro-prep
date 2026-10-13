@@ -3,6 +3,9 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import tempfile
+import subprocess
+import shutil
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -51,6 +54,77 @@ class CodediffIntegrationTests(unittest.TestCase):
         self.assertEqual(pin["codediff"]["mode"], "SHADOW")
         self.assertFalse(pin["codediff"]["trusted_textdiff_sensor"])
 
+
+
+    def test_output_symlink_parent_cannot_write_into_repo(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            repo = home / "repo"
+            repo.mkdir()
+            outside = home / "out"
+            outside.mkdir()
+            link = outside / "alias"
+            link.symlink_to(repo, target_is_directory=True)
+            with patch.object(module, "analyze") as fake:
+                with patch.object(module, "ROOT", repo):
+                    result = module.main(["--repo", str(repo), "--base", "a" * 40,
+                                          "--head", "b" * 40,
+                                          "--out", str(link / "receipt.json")])
+            self.assertEqual(result, 2)
+            fake.assert_not_called()
+            self.assertFalse((repo / "receipt.json").exists())
+
+    def test_pin_manifest_cannot_redirect_upstream_identity(self):
+        original = json.loads(module.PIN_PATH.read_text(encoding="utf-8"))
+        original["codediff"]["repo"] = "attacker/codediff-clone"
+        with tempfile.TemporaryDirectory() as folder:
+            fn = Path(folder) / "modified.json"
+            fn.write_text(json.dumps(original), encoding="utf-8")
+            with patch.object(module, "PIN_PATH", fn):
+                with self.assertRaisesRegex(ValueError, "UNTRUSTED_UPSTREAM_SOURCE_DESCRIPTOR"):
+                    module.trusted_source_snapshot()
+
+    def test_pin_manifest_cannot_repeat_same_file(self):
+        original = json.loads(module.PIN_PATH.read_text(encoding="utf-8"))
+        original["codediff"]["upstream_files"][1] = original["codediff"]["upstream_files"][0]
+        with tempfile.TemporaryDirectory() as folder:
+            fn = Path(folder) / "modified.json"
+            fn.write_text(json.dumps(original), encoding="utf-8")
+            with patch.object(module, "PIN_PATH", fn):
+                with self.assertRaisesRegex(ValueError, "UNTRUSTED_UPSTREAM_SOURCE_DESCRIPTOR"):
+                    module.trusted_source_snapshot()
+
+    def test_dirty_worktree_is_not_a_trusted_review(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder)
+            def git(*args):
+                return subprocess.check_output(["git", "-C", str(repo), *args], stderr=subprocess.DEVNULL).decode().strip()
+            git("init", "-q")
+            git("config", "user.email", "test@example.invalid")
+            git("config", "user.name", "Test")
+            (repo / "hello.txt").write_text("original\n")
+            git("add", "hello.txt")
+            git("commit", "-qm", "base")
+            base = git("rev-parse", "HEAD")
+            (repo / "hello.txt").write_text("candidate\n")
+            git("commit", "-qam", "head")
+            head = git("rev-parse", "HEAD")
+            (repo / "hello.txt").write_text("not in commit\n")
+            with self.assertRaisesRegex(ValueError, "DIRTY_REVIEW_WORKTREE"):
+                module.analyze(repo, base, head)
+            (repo / "hello.txt").write_text("candidate\n")
+            (repo / "new-script.py").write_text("print('not in commit')\n")
+            with self.assertRaisesRegex(ValueError, "DIRTY_REVIEW_WORKTREE"):
+                module.analyze(repo, base, head)
+
+    def test_shell_alias_cannot_change_expected_git_command(self):
+        with patch.object(module.subprocess, "run") as proc:
+            proc.return_value.returncode = 0
+            proc.return_value.stdout = b""
+            module.git(Path("."), "rev-parse", "HEAD")
+        argv = proc.call_args.args[0]
+        self.assertIn("core.fsmonitor=false", argv)
+        self.assertEqual(argv[-2:], ["rev-parse", "HEAD"])
 
 if __name__ == "__main__":
     unittest.main()
