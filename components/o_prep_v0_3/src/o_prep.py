@@ -25,6 +25,7 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_ZIP_MEMBERS = 128
 MAX_UNCOMPRESSED = 25 * 1024 * 1024
 MAX_MEMBER_BYTES = 10 * 1024 * 1024
+MAX_EXTERNAL_JSON_BYTES = 1024 * 1024
 ALLOWED_STAGES = ("PLAN", "EXECUTE", "PUBLISH", "CLOSE")
 JsonDict = dict[str, Any]
 
@@ -57,6 +58,19 @@ def _read_json(payload: bytes, label: str) -> Any:
         return json.loads(payload, object_pairs_hook=no_duplicates, parse_constant=no_constants)
     except (UnicodeError, json.JSONDecodeError, RecursionError, OverflowError) as exc:
         raise OPrepError(f"invalid_json:{label}:{type(exc).__name__}") from exc
+
+
+def _read_external_json(path: Path, label: str) -> Any:
+    """Read a bounded producer JSON document before attempting a parse."""
+    if is_link(path):
+        raise OPrepError("external_json_symlink_forbidden")
+    with path.open("rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise OPrepError("external_json_not_regular_file")
+        data = stream.read(MAX_EXTERNAL_JSON_BYTES + 1)
+    if len(data) > MAX_EXTERNAL_JSON_BYTES:
+        raise OPrepError("external_json_size_limit")
+    return _read_json(data, label)
 
 
 def _utc(value: str) -> datetime:
@@ -272,10 +286,13 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
         flag("INCOMING_NOT_EQ_PROCESSED", "info", "Zero pending does not establish that every incoming item is substantively processed")
 
     if peer_audit_path:
-        peer = _read_json(Path(peer_audit_path).read_bytes(), "peer_archive_audit")
-        prior = peer["peer"]["observed_snapshot"]
-        if peer.get('explicit_reversed_direction_proven') is True and isinstance(prior,dict):
-            flag('PEER_DIRECTION_REVERSED','hold_evidence','Independent peer evidence reports a direction reversal')
+        peer = _read_external_json(Path(peer_audit_path), "peer_archive_audit")
+        if (not isinstance(peer, dict) or not isinstance(peer.get("peer"), dict)
+                or not isinstance(peer["peer"].get("observed_snapshot"), dict)):
+            raise OPrepError("peer_audit_shape_invalid")
+        if peer.get('explicit_reversed_direction_proven') is True:
+            flag('PEER_DIRECTION_REVERSED', 'hold_evidence',
+                 'Independent peer evidence reports a direction reversal')
 
     return {
         "schema": "O_PREP_AUDIT_V1", "o_prep_version": VERSION,
@@ -571,10 +588,10 @@ def _main(argv: Sequence[str] | None = None) -> int:
         if args.cmd == "audit-transport":
             result = audit_transport_bundle(args.zip, args.peer_audit)
         elif args.cmd == "evaluate-bound":
-            result = evaluate_bound_signal(_read_json(Path(args.signal).read_bytes(), "signal"),
+            result = evaluate_bound_signal(_read_external_json(Path(args.signal), "signal"),
                                            args.receipt_index, args.evidence_root)
         else:
-            result = evaluate_signal(_read_json(Path(args.signal).read_bytes(), "signal"))
+            result = evaluate_signal(_read_external_json(Path(args.signal), "signal"))
         output = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         if args.out:
             if not args.output_root:

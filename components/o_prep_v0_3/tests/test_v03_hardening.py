@@ -18,8 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 sys.path.insert(0,str(ROOT/'tests'))
 from o_prep import (OPrepError, _read_json, _secure_out_file, audit_transport_bundle,
-                    evaluate_signal, evaluate_bound_signal, validate_signal, _main)
-from evidence_bindings import BindingError, is_link, verify_local_bindings, _json as binding_json, _safe_local_file
+                    evaluate_signal, evaluate_bound_signal, validate_signal, _main,
+                    MAX_EXTERNAL_JSON_BYTES)
+from evidence_bindings import BindingError, is_link, verify_local_bindings, _json as binding_json, _safe_local_file, _read_limited
 from test_o_prep import signal, ArchiveAuditTests
 try:
     from jsonschema import Draft202012Validator, ValidationError
@@ -515,5 +516,71 @@ class R124CrossPlatformEvidenceContractTests(unittest.TestCase):
                         archive, filename, mutation)
                     with self.assertRaisesRegex(OPrepError, "evidence_shape_invalid"):
                         audit_transport_bundle(str(archive))
+
+
+class R125InputBoundaryTests(unittest.TestCase):
+    def test_post_validation_final_symlink_is_not_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "evidence"
+            root.mkdir()
+            target = root / "item.dat"
+            target.write_bytes(b"EXPECTED")
+            outside = Path(temp) / "outside.dat"
+            outside.write_bytes(b"OUTSIDE_EVIDENCE")
+            _safe_local_file(root, "item.dat")
+            if os.name == "nt":
+                # Simulate a reparse point at this precise open boundary:
+                # non-admin Windows CI may not create a real symlink.
+                with reparse_points(target):
+                    with self.assertRaisesRegex(BindingError, "receipt_symlink_forbidden"):
+                        _read_limited(target, 1024)
+            else:
+                target.unlink()
+                target.symlink_to(outside)
+                with self.assertRaisesRegex(BindingError, "receipt_symlink_forbidden"):
+                    _read_limited(target, 1024)
+
+    def test_oversize_signal_cli_rejects_before_any_evaluation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            signal_path = Path(temp) / "signal.json"
+            signal_path.write_bytes(json.dumps(signal()).encode() +
+                                    b" " * (MAX_EXTERNAL_JSON_BYTES + 1))
+            for command in ("evaluate", "evaluate-bound"):
+                with self.subTest(command=command):
+                    stderr = StringIO()
+                    with patch("o_prep.evaluate_signal") as evaluate, \
+                         patch("o_prep.evaluate_bound_signal") as bound, \
+                         redirect_stderr(stderr):
+                        args = [command, "--signal", str(signal_path)]
+                        if command == "evaluate-bound":
+                            args.extend(["--receipt-index", "x.json",
+                                         "--evidence-root", str(temp)])
+                        rc = _main(args)
+                    self.assertEqual(rc, 2)
+                    self.assertEqual(json.loads(stderr.getvalue())["reason"],
+                                     "external_json_size_limit")
+                    evaluate.assert_not_called()
+                    bound.assert_not_called()
+
+    def test_oversize_peer_audit_fails_before_json_parse(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "fixture.zip"
+            peer = Path(temp) / "peer.json"
+            ArchiveAuditTests().make_archive(archive)
+            peer.write_bytes(b'{"peer":{"observed_snapshot":{}}}' +
+                             b" " * (MAX_EXTERNAL_JSON_BYTES + 1))
+            with self.assertRaisesRegex(OPrepError, "external_json_size_limit"):
+                audit_transport_bundle(str(archive), str(peer))
+
+    def test_malformed_peer_audit_fails_with_contract_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "fixture.zip"
+            peer = Path(temp) / "peer.json"
+            ArchiveAuditTests().make_archive(archive)
+            for bad in (b'[]', b'{"peer":[]}', b'{"peer":{}}'):
+                with self.subTest(value=bad):
+                    peer.write_bytes(bad)
+                    with self.assertRaisesRegex(OPrepError, "peer_audit_shape_invalid"):
+                        audit_transport_bundle(str(archive), str(peer))
 
 if __name__=='__main__':unittest.main()

@@ -104,18 +104,35 @@ def _safe_local_file(root: Path, relative: str) -> Path:
 
 def _read_limited(p: Path, max_bytes: int) -> bytes:
     try:
+        # A symlink installed after the earlier path validation must never
+        # be treated as an ordinary file just because stat/fstat agree.
+        first = p.lstat()
+        if _link_stat(first):
+            raise BindingError("receipt_symlink_forbidden")
+        if not stat.S_ISREG(first.st_mode):
+            raise BindingError("receipt_not_regular_file")
         before = p.stat()
         if before.st_size > max_bytes:
             raise BindingError("receipt_size_limit_exceeded")
-        with p.open("rb") as stream:
-            # Guard concurrent replacement before and after; no privileged/trusted
-            # provenance is inferred even when these checks pass.
+        if (first.st_ino, first.st_dev) != (before.st_ino, before.st_dev):
+            raise BindingError("receipt_changed_during_open")
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(p, flags)
+        with os.fdopen(fd, "rb") as stream:
             opened = os.fstat(stream.fileno())
-            if not stat.S_ISREG(opened.st_mode) or (before.st_ino, before.st_dev) != (opened.st_ino, opened.st_dev):
+            at_open = p.lstat()
+            if (_link_stat(at_open) or not stat.S_ISREG(opened.st_mode)
+                    or (first.st_ino, first.st_dev) != (opened.st_ino, opened.st_dev)
+                    or (at_open.st_ino, at_open.st_dev) != (opened.st_ino, opened.st_dev)):
                 raise BindingError("receipt_changed_during_open")
             result = stream.read(max_bytes + 1)
             after = os.fstat(stream.fileno())
-            if len(result) > max_bytes or (opened.st_size, opened.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            at_end = p.lstat()
+            if (_link_stat(at_end)
+                    or (at_end.st_ino, at_end.st_dev) != (opened.st_ino, opened.st_dev)
+                    or len(result) > max_bytes
+                    or (opened.st_size, opened.st_mtime_ns) !=
+                       (after.st_size, after.st_mtime_ns)):
                 raise BindingError("receipt_changed_during_read")
             return result
     except (OSError, OverflowError) as exc:
