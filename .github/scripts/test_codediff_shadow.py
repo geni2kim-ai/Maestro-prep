@@ -2,8 +2,11 @@
 from __future__ import annotations
 import importlib.util
 import json
+import importlib.util
+import importlib._bootstrap_external as bootstrap_external
 import sys
 import tempfile
+import shutil
 import subprocess
 import shutil
 import unittest
@@ -116,6 +119,54 @@ class CodediffIntegrationTests(unittest.TestCase):
             (repo / "new-script.py").write_text("print('not in commit')\n")
             with self.assertRaisesRegex(ValueError, "DIRTY_REVIEW_WORKTREE"):
                 module.analyze(repo, base, head)
+
+    def test_forged_valid_timestamp_bytecode_is_not_executed(self):
+        # A crafted CPython .pyc bearing the original file mtime+length can
+        # execute an entirely different code object via SourceFileLoader.
+        # The policy source itself remains byte-for-byte upstream-pinned.
+        with tempfile.TemporaryDirectory() as folder:
+            temp = Path(folder)
+            home = temp / ".github" / "review_tools" / "codediff_v25"
+            home.mkdir(parents=True)
+            for source in module.TRUSTED_VENDOR_BLOBS:
+                p = temp / source
+                p.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(module.ROOT / source, p)
+            policy = home / "policy_engine.py"
+            clean = policy.read_text(encoding="utf-8")
+            self.assertEqual(module.object_id(policy.read_bytes()),
+                             module.TRUSTED_VENDOR_BLOBS[".github/review_tools/codediff_v25/policy_engine.py"])
+            bad = clean.replace("from __future__ import annotations",
+                                "from __future__ import annotations\nINJECTED_PYC_EXECUTED=True", 1)
+            code = compile(bad, str(policy), "exec")
+            cache = Path(importlib.util.cache_from_source(str(policy)))
+            cache.parent.mkdir()
+            stat = policy.stat()
+            cache.write_bytes(bootstrap_external._code_to_timestamp_pyc(
+                code, int(stat.st_mtime), stat.st_size))
+            # Pin loader input to the fresh copied source and keep the package
+            # manifest itself unchanged; no private inputs leave the tmpdir.
+            with patch.object(module, "ROOT", temp), patch.object(module, "VENDOR", home):
+                upstream_pins, loaded = module.trusted_source_snapshot()
+                self.assertFalse(hasattr(loaded, "INJECTED_PYC_EXECUTED"))
+                self.assertEqual(upstream_pins["codediff"]["mode"], "SHADOW")
+            self.assertTrue(cache.exists())  # Attack remained present.
+
+    def test_verified_yaml_is_not_loaded_from_second_file_read(self):
+        pins, engine = module.trusted_source_snapshot()
+        baseline = engine.yaml.safe_load(engine._maestro_verified_policy_yaml["protected-paths.yml"])
+        self.assertIn(".github/workflows/**", baseline["governance_paths"])
+        self.assertEqual(set(engine._maestro_verified_policy_yaml),
+                         {"protected-paths.yml", "escalation-policy.yml", "sensor-policy.yml"})
+        with self.assertRaises(TypeError):
+            engine._maestro_verified_policy_yaml["protected-paths.yml"] = b"changed"
+
+    def test_policy_snapshots_are_bound_to_raw_upstream_bytes(self):
+        _, engine = module.trusted_source_snapshot()
+        for policy in ("protected-paths.yml", "escalation-policy.yml", "sensor-policy.yml"):
+            data = engine._maestro_verified_policy_yaml[policy]
+            self.assertEqual(module.object_id(data), module.TRUSTED_VENDOR_BLOBS[
+                ".github/review_tools/codediff_v25/" + policy])
 
     def test_shell_alias_cannot_change_expected_git_command(self):
         with patch.object(module.subprocess, "run") as proc:

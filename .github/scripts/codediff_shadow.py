@@ -8,13 +8,13 @@ Adversarial workers, Leonardo models, or a human approval step.
 from __future__ import annotations
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+from types import MappingProxyType, ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -114,6 +114,7 @@ def trusted_source_snapshot() -> tuple[dict[str, Any], Any]:
             or any(not isinstance(x, dict) for x in paths)):
         raise ValueError("UPSTREAM_PINSET_INVALID")
     seen: set[str] = set()
+    verified: dict[str, bytes] = {}
     for item in paths:
         dest = item.get("dest")
         if (not isinstance(dest, str) or dest in seen
@@ -128,14 +129,23 @@ def trusted_source_snapshot() -> tuple[dict[str, Any], Any]:
         data = target.read_bytes()
         if object_id(data) != TRUSTED_VENDOR_BLOBS[dest]:
             raise ValueError("UPSTREAM_SOURCE_PIN_MISMATCH")
+        verified[dest] = data
     if seen != set(TRUSTED_VENDOR_BLOBS):
         raise ValueError("UPSTREAM_PINSET_INVALID")
+    # Importlib's SourceFileLoader can execute a valid-looking __pycache__ .pyc
+    # even when the corresponding source bytes were SHA checked above. Compile
+    # exactly the *verified* source snapshot and bypass importlib cache lookup.
     path = VENDOR / "policy_engine.py"
-    spec = importlib.util.spec_from_file_location("_pinned_pr_codediff_policy_engine_v25", path)
-    if spec is None or spec.loader is None:
-        raise ValueError("CODEDIFF_POLICY_IMPORT_UNAVAILABLE")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    payload = verified[".github/review_tools/codediff_v25/policy_engine.py"]
+    module = ModuleType("_pinned_pr_codediff_policy_engine_v25")
+    module.__file__ = str(path)
+    exec(compile(payload, str(path), "exec", dont_inherit=True), module.__dict__)
+    # Keep policy YAML in immutable byte snapshots: no second disk read after
+    # verifying its object ID, even if files are concurrently replaced.
+    module._maestro_verified_policy_yaml = MappingProxyType({
+        Path(name).name: content for name, content in verified.items()
+        if name.endswith(".yml")
+    })
     return pins, module
 
 
@@ -155,9 +165,12 @@ def analyze(repo: Path, base: str, head: str) -> dict[str, Any]:
     if not paths:
         raise ValueError("EMPTY_DIFF")
     # Real upstream policy_engine.run: classify paths + derive escalation.
-    protected = engine.load_yaml(VENDOR / "protected-paths.yml")
-    escalation = engine.load_yaml(VENDOR / "escalation-policy.yml")
-    sensor = engine.load_yaml(VENDOR / "sensor-policy.yml")
+    # Parsing the verified in-memory bytes closes the post-pin read race.
+    # Use the original upstream policy decoder (PyYAML) and unchanged rules.
+    verified_yaml = engine._maestro_verified_policy_yaml
+    protected = engine.yaml.safe_load(verified_yaml["protected-paths.yml"].decode("utf-8"))
+    escalation = engine.yaml.safe_load(verified_yaml["escalation-policy.yml"].decode("utf-8"))
+    sensor = engine.yaml.safe_load(verified_yaml["sensor-policy.yml"].decode("utf-8"))
     merged = {k: list(protected.get(k, [])) + OVERLAY.get(k, [])
               for k in OVERLAY}
     path_hits = engine.classify_paths(paths, merged)
