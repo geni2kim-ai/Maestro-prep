@@ -79,6 +79,8 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     needs: public-profile
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     permissions:
       contents: read
     steps:
