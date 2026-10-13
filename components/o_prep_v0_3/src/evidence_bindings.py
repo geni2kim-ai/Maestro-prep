@@ -60,7 +60,7 @@ def _bad_constant(_value: str) -> NoReturn:
 def _json(data: bytes, what: str) -> JsonDict:
     try:
         value = json.loads(data, object_pairs_hook=_unique_pairs, parse_constant=_bad_constant)
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError, OverflowError) as exc:
         raise BindingError(f"invalid_{what}_json") from exc
     if not isinstance(value, dict):
         raise BindingError(f"invalid_{what}_shape")

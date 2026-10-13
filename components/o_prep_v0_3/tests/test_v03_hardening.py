@@ -2,6 +2,8 @@
 import copy
 import hashlib
 import json
+from contextlib import redirect_stderr
+from io import StringIO
 import os
 import subprocess
 import sys
@@ -15,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 sys.path.insert(0,str(ROOT/'tests'))
 from o_prep import (OPrepError, _read_json, _secure_out_file, audit_transport_bundle,
-                    evaluate_signal, evaluate_bound_signal, validate_signal)
-from evidence_bindings import BindingError, is_link, verify_local_bindings
+                    evaluate_signal, evaluate_bound_signal, validate_signal, _main)
+from evidence_bindings import BindingError, is_link, verify_local_bindings, _json as binding_json
 from test_o_prep import signal, ArchiveAuditTests
 try:
     from jsonschema import Draft202012Validator, ValidationError
@@ -317,6 +319,48 @@ class V03ArchiveTests(unittest.TestCase):
             with __import__('zipfile').ZipFile(p,'w') as z:
                 for n,b in members.items():z.writestr(n,b)
             with self.assertRaisesRegex(OPrepError,'direction'):audit_transport_bundle(str(p))
+
+
+
+class R122MalformedInputTests(unittest.TestCase):
+    def test_array_and_object_enum_fields_hold_with_stable_contract_error(self):
+        choices = (("router", "status"), ("review", "status"),
+                   ("review", "evidence_class"), ("delivery", "state"),
+                   ("delivery", "disposition"))
+        for group, key in choices:
+            for bad in ([], {"READY": True}, None):
+                with self.subTest(group=group, key=key, bad=bad):
+                    x = signal()
+                    x[group][key] = bad
+                    with self.assertRaises(OPrepError):
+                        validate_signal(x)
+
+    def test_exit_code_boolean_cannot_equal_integer(self):
+        for status, bad_exit in (("BLOCKED", True), ("READY", False)):
+            with self.subTest(status=status):
+                x = signal()
+                x["router"].update(status=status, exit_code=bad_exit)
+                with self.assertRaisesRegex(OPrepError, "router_status_exit_code_conflict"):
+                    validate_signal(x)
+
+    def test_deep_json_stably_rejected_in_both_o_prep_parsers(self):
+        payload = b"[" * 12000 + b"0" + b"]" * 12000
+        with self.assertRaises(OPrepError):
+            _read_json(payload, "signal")
+        with self.assertRaises(BindingError):
+            binding_json(payload, "receipt_index")
+
+    def test_cli_os_error_never_discloses_private_path(self):
+        secret = "/sensitive/internal/node/unique-sensitive-path"
+        with patch("o_prep.audit_transport_bundle",
+                   side_effect=OSError(2, "No such file", secret)):
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                result = _main(["audit-transport", "--zip", "missing.zip"])
+        self.assertEqual(result, 2)
+        message = json.loads(stderr.getvalue())
+        self.assertEqual(message["reason"], "malformed_input_or_io")
+        self.assertNotIn(secret, stderr.getvalue())
 
 
 if __name__=='__main__':unittest.main()

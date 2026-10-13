@@ -54,7 +54,7 @@ def _read_json(payload: bytes, label: str) -> Any:
         raise OPrepError(f"nonfinite_json_number:{label}")
     try:
         return json.loads(payload, object_pairs_hook=no_duplicates, parse_constant=no_constants)
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError, OverflowError) as exc:
         raise OPrepError(f"invalid_json:{label}:{type(exc).__name__}") from exc
 
 
@@ -276,18 +276,26 @@ def validate_signal(signal: JsonDict) -> None:
         raise OPrepError("invalid_metrics_or_gates")
     if not all(isinstance(x, str) and x.strip() for x in signal["open_gates"]):
         raise OPrepError("invalid_open_gate_value")
-    if signal["router"].get("status") not in {"READY", "BLOCKED", "CLARIFICATION_REQUIRED", "ERROR", "NOT_RUN"}:
+    if (type(signal["router"].get("status")) is not str or
+            signal["router"]["status"] not in {"READY", "BLOCKED", "CLARIFICATION_REQUIRED", "ERROR", "NOT_RUN"}):
         raise OPrepError("invalid_router_status")
     expected_exits = {"READY": 0, "BLOCKED": 1, "CLARIFICATION_REQUIRED": 2, "ERROR": 3, "NOT_RUN": None}
-    if signal["router"].get("exit_code", "MISSING") != expected_exits[signal["router"]["status"]]:
+    exit_code = signal["router"].get("exit_code", "MISSING")
+    expected_code = expected_exits[signal["router"]["status"]]
+    if not (exit_code is None if expected_code is None
+            else type(exit_code) is int and exit_code == expected_code):
         raise OPrepError("router_status_exit_code_conflict")
-    if signal["review"].get("status") not in {"PASS", "FINDINGS", "NOT_RUN"}:
+    if (type(signal["review"].get("status")) is not str or
+            signal["review"]["status"] not in {"PASS", "FINDINGS", "NOT_RUN"}):
         raise OPrepError("invalid_review_status")
-    if signal["review"].get("evidence_class") not in {"NOT_RUN", "SAME_LINEAGE", "FRESH_CONTEXT", "VERIFIED_INDEPENDENT"}:
+    if (type(signal["review"].get("evidence_class")) is not str or
+            signal["review"]["evidence_class"] not in {"NOT_RUN", "SAME_LINEAGE", "FRESH_CONTEXT", "VERIFIED_INDEPENDENT"}):
         raise OPrepError("invalid_review_class")
-    if signal["delivery"].get("state") not in {"NOT_RUN", "PENDING", "DELIVERED", "PROCESSED"}:
+    if (type(signal["delivery"].get("state")) is not str or
+            signal["delivery"]["state"] not in {"NOT_RUN", "PENDING", "DELIVERED", "PROCESSED"}):
         raise OPrepError("invalid_delivery_state")
-    if signal["delivery"].get("disposition") not in {"NOT_RUN", "HELD", "FINDINGS", "ACCEPTED", "REJECTED"}:
+    if (type(signal["delivery"].get("disposition")) is not str or
+            signal["delivery"]["disposition"] not in {"NOT_RUN", "HELD", "FINDINGS", "ACCEPTED", "REJECTED"}):
         raise OPrepError("invalid_delivery_disposition")
     mandatory_bools = {
         "router": ("local_router_executed", "policy_hash_verified", "input_hash_verified", "output_hash_verified", "evidence_root_isolated"),
@@ -525,8 +533,18 @@ def _main(argv: Sequence[str] | None = None) -> int:
             _secure_out_file(Path(args.out), Path(args.output_root), output)
         else:
             sys.stdout.write(output)
-    except (OSError, zipfile.BadZipFile, OPrepError, BindingError, KeyError, TypeError) as exc:
-        print(json.dumps({"error": type(exc).__name__, "reason": str(exc)[:200],
+    except (OPrepError, BindingError) as exc:
+        # Only a bounded, known-shape code leaves the process. Never echo
+        # untrusted labels, absolute paths or data values in diagnostic JSON.
+        reason = str(exc).split(":", 1)[0]
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,79}", reason) is None:
+            reason = "invalid_input"
+        print(json.dumps({"error": "OPREP_HOLD", "reason": reason,
+                          "candidate_only": True, "decision_authority": "none"}), file=sys.stderr)
+        return 2
+    except (OSError, zipfile.BadZipFile, KeyError, TypeError,
+            ValueError, RecursionError, OverflowError):
+        print(json.dumps({"error": "OPREP_HOLD", "reason": "malformed_input_or_io",
                           "candidate_only": True, "decision_authority": "none"}), file=sys.stderr)
         return 2
     return 0
