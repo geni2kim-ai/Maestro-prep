@@ -30,13 +30,13 @@
     },
     {
       "path": "adapters/LEONARDO_INTEGRATION_CONTRACT.md",
-      "bytes": 764,
-      "sha256": "b701b5b93a50ecaafe4e070e8b108d81dbef6f56706f884a7b83e25a1700ba0d"
+      "bytes": 2942,
+      "sha256": "1f2d4afe0f90830e65b44e6cf4f09a56d827449b770b30ca78c0a4e46498cc60"
     },
     {
       "path": "components/o_prep_v0_3/SOURCE_PIN.json",
       "bytes": 328,
-      "sha256": "1edc6ccb6721e8788b595f4cf7eee9adcefc34f1359e3848f6787715fef479ba"
+      "sha256": "c92041fc0a61785bbc4cff7ca482d5cc7b716f496b69d4d0672777bc0657588d"
     },
     {
       "path": "components/o_prep_v0_3/schemas/decision.schema.json",
@@ -55,13 +55,13 @@
     },
     {
       "path": "components/o_prep_v0_3/src/evidence_bindings.py",
-      "bytes": 11200,
-      "sha256": "1f9801e329bcc512fe0e9e34e30ebf841b3c0fbef0ade3505b2c506d290ca598"
+      "bytes": 12138,
+      "sha256": "b9871f9c259b6b4a11e00de8065210f3d25ca339a4859764344061a0ea1f2321"
     },
     {
       "path": "components/o_prep_v0_3/src/o_prep.py",
-      "bytes": 28556,
-      "sha256": "a95f5a52f1a472773fabb8ce17ac34f0b503aaa2b00705aeb244fef1f9d4cf3f"
+      "bytes": 33258,
+      "sha256": "637f05d12b30ef6a2f173117c06f33d64ab849b7a723467fd859ed10dccf6919"
     },
     {
       "path": "components/o_prep_v0_3/tests/test_o_prep.py",
@@ -75,8 +75,8 @@
     },
     {
       "path": "components/o_prep_v0_3/tests/test_v03_hardening.py",
-      "bytes": 16943,
-      "sha256": "33c679c2cd25c38420cc5703679000d5aeb29f48fa1106b517ce7d2b5fd83c53"
+      "bytes": 30906,
+      "sha256": "d996e514f1f26b7df9601a7722700e0d2749b53f5c6461423e13e72f48128e35"
     },
     {
       "path": "evidence/prior_simulation_baseline.json",
@@ -160,13 +160,13 @@
     },
     {
       "path": "maestro_prep/cli.py",
-      "bytes": 2605,
-      "sha256": "a1ad2f1fd129844c2cf05158b7d622eae65bc75ce487248ca27d6a44ec4832fd"
+      "bytes": 2868,
+      "sha256": "587771e27bb19b6750ff979a5b7d41bc39c51966fc3c12d74232f3421ab48466"
     },
     {
       "path": "maestro_prep/coordinator.py",
-      "bytes": 14442,
-      "sha256": "cf12e882ba16cefc103c792f9dfd088e3951004ae2cd141af28870157f76d8e9"
+      "bytes": 21027,
+      "sha256": "4d91922523ed98f313dd10c8d5e97151152fe44c32af19aabab972a92df1bfbe"
     },
     {
       "path": "schemas/lock.schema.json",
@@ -180,8 +180,8 @@
     },
     {
       "path": "tests/test_maestro.py",
-      "bytes": 12816,
-      "sha256": "9567812fe5e0dd887c1413e75e90f334eb018815567af8c61192f2450cf7c7c0"
+      "bytes": 31758,
+      "sha256": "c686afb6a7e0ddfbe17539194c25a0d5c23e014c9c86d13e9cd4f2a136828ba5"
     },
     {
       "path": "tests/test_public_privacy_check.py",

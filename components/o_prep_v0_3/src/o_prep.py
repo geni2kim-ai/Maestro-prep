@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -24,6 +25,7 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_ZIP_MEMBERS = 128
 MAX_UNCOMPRESSED = 25 * 1024 * 1024
 MAX_MEMBER_BYTES = 10 * 1024 * 1024
+MAX_EXTERNAL_JSON_BYTES = 1024 * 1024
 ALLOWED_STAGES = ("PLAN", "EXECUTE", "PUBLISH", "CLOSE")
 JsonDict = dict[str, Any]
 
@@ -54,8 +56,21 @@ def _read_json(payload: bytes, label: str) -> Any:
         raise OPrepError(f"nonfinite_json_number:{label}")
     try:
         return json.loads(payload, object_pairs_hook=no_duplicates, parse_constant=no_constants)
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError, OverflowError) as exc:
         raise OPrepError(f"invalid_json:{label}:{type(exc).__name__}") from exc
+
+
+def _read_external_json(path: Path, label: str) -> Any:
+    """Read a bounded producer JSON document before attempting a parse."""
+    if is_link(path):
+        raise OPrepError("external_json_symlink_forbidden")
+    with path.open("rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise OPrepError("external_json_not_regular_file")
+        data = stream.read(MAX_EXTERNAL_JSON_BYTES + 1)
+    if len(data) > MAX_EXTERNAL_JSON_BYTES:
+        raise OPrepError("external_json_size_limit")
+    return _read_json(data, label)
 
 
 def _utc(value: str) -> datetime:
@@ -75,14 +90,27 @@ def _is_safe_member(info: zipfile.ZipInfo) -> bool:
     if not isinstance(name, str) or not name or "\\" in name or "\x00" in name:
         return False
     path = PurePosixPath(name)
-    if path.is_absolute() or name.startswith(("/", "./")) or any(p in {"..", "."} for p in name.split("/")):
-        return False
-    if re.match(r"^[a-zA-Z]:", name):
+    # Reject lexically ambiguous aliases rather than relying on PurePosixPath
+    # normalization. Colon is an NTFS alternate data stream separator.
+    segments = name.split("/")
+    if (path.is_absolute() or name.startswith(("/", "./"))
+            or any(segment in {"", ".", ".."} or segment.endswith((" ", "."))
+                   or ":" in segment or any(ord(ch) < 32 for ch in segment)
+                   for segment in segments)):
         return False
     mode = (info.external_attr >> 16) & 0xFFFF
     if stat.S_IFMT(mode) == stat.S_IFLNK:
         return False
     return True
+
+
+def _nonnegative_counts(record: Any, keys: tuple[str, ...], code: str) -> JsonDict:
+    """Reject booleans and negative producer counters before any comparisons."""
+    if not isinstance(record, dict) or any(
+        type(record.get(key)) is not int or record[key] < 0 for key in keys
+    ):
+        raise OPrepError(code)
+    return record
 
 
 def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) -> JsonDict:
@@ -92,12 +120,19 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     the reported router/test/host assertions remain PRODUCER_REPORTED.
     """
     path = Path(zip_path)
-    if not path.is_file():
+    if not path.is_file() or is_link(path):
         raise OPrepError("evidence_file_missing")
-    if path.stat().st_size > MAX_UNCOMPRESSED:
+    # Hash and inspect the SAME bounded bytes. Reopening a path for ZipFile
+    # could silently inspect different bytes after an adversarial replacement.
+    with path.open("rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if not stat.S_ISREG(opened.st_mode):
+            raise OPrepError("evidence_file_not_regular")
+        archive_bytes = stream.read(MAX_UNCOMPRESSED + 1)
+    if len(archive_bytes) > MAX_UNCOMPRESSED:
         raise OPrepError("zip_file_too_large")
-    archive_hash = _sha256(path.read_bytes())
-    with zipfile.ZipFile(path) as z:
+    archive_hash = _sha256(archive_bytes)
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as z:
         members = z.infolist()
         if len(members) > MAX_ZIP_MEMBERS or len(members) < 2:
             raise OPrepError("archive_member_count_invalid")
@@ -154,7 +189,22 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     branch_probes = _read_json(content["branch_probes.json"], "branch_probes")
     episodes = _read_json(content["episodes.json"], "episodes")
     evidence_ledger = _read_json(content["evidence_ledger.json"], "evidence_ledger")
-    if any(not isinstance(item, list) for item in (branch_probes, episodes)) or not isinstance(ledger, dict):
+    if (any(not isinstance(item, list) for item in (branch_probes, episodes))
+            or any(not isinstance(item, dict) for item in
+                   (snapshot, router, ledger, receipts, gates, evidence_ledger))):
+        raise OPrepError("evidence_shape_invalid")
+    if (any(not isinstance(snapshot.get(key), dict) for key in
+            ("packet_metrics_lifetime", "packet_metrics_72h_window",
+             "regression_test_baseline"))
+            or not isinstance(router.get("installed_router", {}), dict)
+            or not isinstance(receipts.get("test_suites"), list)
+            or not isinstance(gates.get("gates", []), list)
+            or not all(isinstance(item, dict) for item in gates.get("gates", []))
+            or not isinstance(evidence_ledger.get("claims", []), list)):
+        raise OPrepError("evidence_shape_invalid")
+    queue_meta = snapshot.get("queue_status_disk", {})
+    if (not isinstance(queue_meta, dict)
+            or not isinstance(queue_meta.get("incoming", {}), dict)):
         raise OPrepError("evidence_shape_invalid")
 
     findings: list[dict[str, str]] = []
@@ -179,12 +229,18 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
     sent = sum(row.get("sender_node_id") == "SUBJECT" for row in rows)
     received = sum(row.get("receiver_node_id") == "SUBJECT" for row in rows)
     observed_lifetime = {"sent": sent, "received": received, "deliveries": len(rows)}
-    reported = snapshot["packet_metrics_lifetime"]
+    reported = _nonnegative_counts(snapshot["packet_metrics_lifetime"],
+                                   ("packets_sent_by_subject", "packets_received_by_subject",
+                                    "packet_deliveries_involving_subject"),
+                                   "invalid_lifetime_metric_counts")
     if ((sent, received, len(rows)) !=
        (reported["packets_sent_by_subject"], reported["packets_received_by_subject"], reported["packet_deliveries_involving_subject"])):
         flag("LIFETIME_METRIC_MISMATCH", "hold_evidence", "Reported totals differ from supplied ledger")
 
-    window = snapshot["packet_metrics_72h_window"]
+    window = _nonnegative_counts(snapshot["packet_metrics_72h_window"],
+                                 ("packets_sent_by_subject", "packets_received_by_subject",
+                                  "total_packets_in_window"),
+                                 "invalid_window_metric_counts")
     start = _utc(window["window_start_utc"])
     end = _utc(window["window_end_utc"])
     if end <= start:
@@ -208,13 +264,20 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
         flag("WINDOW_LEDGER_MISMATCH", "hold_evidence",
              "Reported window totals differ from raw recorded timestamps; historically malformed timestamps are not silently corrected")
 
-    test_baseline = snapshot["regression_test_baseline"]
+    test_baseline = _nonnegative_counts(snapshot["regression_test_baseline"],
+                                        ("passed", "skipped", "failures",
+                                         "errors", "total_tests"),
+                                        "invalid_test_baseline_counts")
     count_ok = (test_baseline["passed"] + test_baseline["skipped"] +
                 test_baseline["failures"] + test_baseline["errors"] == test_baseline["total_tests"])
     if not count_ok:
         flag("TEST_COUNT_INCONSISTENT", "hold_evidence", "Reported test arithmetic inconsistent")
     test_suites = receipts["test_suites"]
-    if not any(s.get("total_tests") == test_baseline["total_tests"] for s in test_suites):
+    if not isinstance(test_suites, list):
+        raise OPrepError("invalid_test_suite_shape")
+    for suite in test_suites:
+        _nonnegative_counts(suite, ("total_tests",), "invalid_test_suite_counts")
+    if not any(s["total_tests"] == test_baseline["total_tests"] for s in test_suites):
         flag("MISSING_CANONICAL_RECEIPT", "hold_evidence", "Canonical reported test count lacks matching suite summary")
     # A delivered receipt is a producer assertion, not a raw runner transcript.
     flag("RAW_HOST_VALIDATION_NOT_TRANSPORTED", "info", "Unit-test and router pass counts are SUBJECT reported; host executable and runner output not transported")
@@ -223,10 +286,13 @@ def audit_transport_bundle(zip_path: str, peer_audit_path: str | None = None) ->
         flag("INCOMING_NOT_EQ_PROCESSED", "info", "Zero pending does not establish that every incoming item is substantively processed")
 
     if peer_audit_path:
-        peer = _read_json(Path(peer_audit_path).read_bytes(), "peer_archive_audit")
-        prior = peer["peer"]["observed_snapshot"]
-        if peer.get('explicit_reversed_direction_proven') is True and isinstance(prior,dict):
-            flag('PEER_DIRECTION_REVERSED','hold_evidence','Independent peer evidence reports a direction reversal')
+        peer = _read_external_json(Path(peer_audit_path), "peer_archive_audit")
+        if (not isinstance(peer, dict) or not isinstance(peer.get("peer"), dict)
+                or not isinstance(peer["peer"].get("observed_snapshot"), dict)):
+            raise OPrepError("peer_audit_shape_invalid")
+        if peer.get('explicit_reversed_direction_proven') is True:
+            flag('PEER_DIRECTION_REVERSED', 'hold_evidence',
+                 'Independent peer evidence reports a direction reversal')
 
     return {
         "schema": "O_PREP_AUDIT_V1", "o_prep_version": VERSION,
@@ -276,18 +342,26 @@ def validate_signal(signal: JsonDict) -> None:
         raise OPrepError("invalid_metrics_or_gates")
     if not all(isinstance(x, str) and x.strip() for x in signal["open_gates"]):
         raise OPrepError("invalid_open_gate_value")
-    if signal["router"].get("status") not in {"READY", "BLOCKED", "CLARIFICATION_REQUIRED", "ERROR", "NOT_RUN"}:
+    if (type(signal["router"].get("status")) is not str or
+            signal["router"]["status"] not in {"READY", "BLOCKED", "CLARIFICATION_REQUIRED", "ERROR", "NOT_RUN"}):
         raise OPrepError("invalid_router_status")
     expected_exits = {"READY": 0, "BLOCKED": 1, "CLARIFICATION_REQUIRED": 2, "ERROR": 3, "NOT_RUN": None}
-    if signal["router"].get("exit_code", "MISSING") != expected_exits[signal["router"]["status"]]:
+    exit_code = signal["router"].get("exit_code", "MISSING")
+    expected_code = expected_exits[signal["router"]["status"]]
+    if not (exit_code is None if expected_code is None
+            else type(exit_code) is int and exit_code == expected_code):
         raise OPrepError("router_status_exit_code_conflict")
-    if signal["review"].get("status") not in {"PASS", "FINDINGS", "NOT_RUN"}:
+    if (type(signal["review"].get("status")) is not str or
+            signal["review"]["status"] not in {"PASS", "FINDINGS", "NOT_RUN"}):
         raise OPrepError("invalid_review_status")
-    if signal["review"].get("evidence_class") not in {"NOT_RUN", "SAME_LINEAGE", "FRESH_CONTEXT", "VERIFIED_INDEPENDENT"}:
+    if (type(signal["review"].get("evidence_class")) is not str or
+            signal["review"]["evidence_class"] not in {"NOT_RUN", "SAME_LINEAGE", "FRESH_CONTEXT", "VERIFIED_INDEPENDENT"}):
         raise OPrepError("invalid_review_class")
-    if signal["delivery"].get("state") not in {"NOT_RUN", "PENDING", "DELIVERED", "PROCESSED"}:
+    if (type(signal["delivery"].get("state")) is not str or
+            signal["delivery"]["state"] not in {"NOT_RUN", "PENDING", "DELIVERED", "PROCESSED"}):
         raise OPrepError("invalid_delivery_state")
-    if signal["delivery"].get("disposition") not in {"NOT_RUN", "HELD", "FINDINGS", "ACCEPTED", "REJECTED"}:
+    if (type(signal["delivery"].get("disposition")) is not str or
+            signal["delivery"]["disposition"] not in {"NOT_RUN", "HELD", "FINDINGS", "ACCEPTED", "REJECTED"}):
         raise OPrepError("invalid_delivery_disposition")
     mandatory_bools = {
         "router": ("local_router_executed", "policy_hash_verified", "input_hash_verified", "output_hash_verified", "evidence_root_isolated"),
@@ -514,10 +588,10 @@ def _main(argv: Sequence[str] | None = None) -> int:
         if args.cmd == "audit-transport":
             result = audit_transport_bundle(args.zip, args.peer_audit)
         elif args.cmd == "evaluate-bound":
-            result = evaluate_bound_signal(_read_json(Path(args.signal).read_bytes(), "signal"),
+            result = evaluate_bound_signal(_read_external_json(Path(args.signal), "signal"),
                                            args.receipt_index, args.evidence_root)
         else:
-            result = evaluate_signal(_read_json(Path(args.signal).read_bytes(), "signal"))
+            result = evaluate_signal(_read_external_json(Path(args.signal), "signal"))
         output = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         if args.out:
             if not args.output_root:
@@ -525,8 +599,18 @@ def _main(argv: Sequence[str] | None = None) -> int:
             _secure_out_file(Path(args.out), Path(args.output_root), output)
         else:
             sys.stdout.write(output)
-    except (OSError, zipfile.BadZipFile, OPrepError, BindingError, KeyError, TypeError) as exc:
-        print(json.dumps({"error": type(exc).__name__, "reason": str(exc)[:200],
+    except (OPrepError, BindingError) as exc:
+        # Only a bounded, known-shape code leaves the process. Never echo
+        # untrusted labels, absolute paths or data values in diagnostic JSON.
+        reason = str(exc).split(":", 1)[0]
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,79}", reason) is None:
+            reason = "invalid_input"
+        print(json.dumps({"error": "OPREP_HOLD", "reason": reason,
+                          "candidate_only": True, "decision_authority": "none"}), file=sys.stderr)
+        return 2
+    except (OSError, zipfile.BadZipFile, KeyError, TypeError,
+            ValueError, RecursionError, OverflowError):
+        print(json.dumps({"error": "OPREP_HOLD", "reason": "malformed_input_or_io",
                           "candidate_only": True, "decision_authority": "none"}), file=sys.stderr)
         return 2
     return 0

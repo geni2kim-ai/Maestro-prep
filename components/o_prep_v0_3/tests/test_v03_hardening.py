@@ -1,7 +1,10 @@
 """V0.3 adversarial tests on synthetic data; cannot certify a production node."""
 import copy
 import hashlib
+import io
 import json
+from contextlib import redirect_stderr
+from io import StringIO
 import os
 import subprocess
 import sys
@@ -15,8 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 sys.path.insert(0,str(ROOT/'tests'))
 from o_prep import (OPrepError, _read_json, _secure_out_file, audit_transport_bundle,
-                    evaluate_signal, evaluate_bound_signal, validate_signal)
-from evidence_bindings import BindingError, is_link, verify_local_bindings
+                    evaluate_signal, evaluate_bound_signal, validate_signal, _main,
+                    MAX_EXTERNAL_JSON_BYTES)
+from evidence_bindings import BindingError, is_link, verify_local_bindings, _json as binding_json, _safe_local_file, _read_limited
 from test_o_prep import signal, ArchiveAuditTests
 try:
     from jsonschema import Draft202012Validator, ValidationError
@@ -318,5 +322,265 @@ class V03ArchiveTests(unittest.TestCase):
                 for n,b in members.items():z.writestr(n,b)
             with self.assertRaisesRegex(OPrepError,'direction'):audit_transport_bundle(str(p))
 
+
+
+class R122MalformedInputTests(unittest.TestCase):
+    def test_array_and_object_enum_fields_hold_with_stable_contract_error(self):
+        choices = (("router", "status"), ("review", "status"),
+                   ("review", "evidence_class"), ("delivery", "state"),
+                   ("delivery", "disposition"))
+        for group, key in choices:
+            for bad in ([], {"READY": True}, None):
+                with self.subTest(group=group, key=key, bad=bad):
+                    x = signal()
+                    x[group][key] = bad
+                    with self.assertRaises(OPrepError):
+                        validate_signal(x)
+
+    def test_exit_code_boolean_cannot_equal_integer(self):
+        for status, bad_exit in (("BLOCKED", True), ("READY", False)):
+            with self.subTest(status=status):
+                x = signal()
+                x["router"].update(status=status, exit_code=bad_exit)
+                with self.assertRaisesRegex(OPrepError, "router_status_exit_code_conflict"):
+                    validate_signal(x)
+
+    def test_deep_json_stably_rejected_in_both_o_prep_parsers(self):
+        payload = b"[" * 12000 + b"0" + b"]" * 12000
+        with self.assertRaises(OPrepError):
+            _read_json(payload, "signal")
+        with self.assertRaises(BindingError):
+            binding_json(payload, "receipt_index")
+
+    def test_cli_os_error_never_discloses_private_path(self):
+        secret = "/sensitive/internal/node/unique-sensitive-path"
+        with patch("o_prep.audit_transport_bundle",
+                   side_effect=OSError(2, "No such file", secret)):
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                result = _main(["audit-transport", "--zip", "missing.zip"])
+        self.assertEqual(result, 2)
+        message = json.loads(stderr.getvalue())
+        self.assertEqual(message["reason"], "malformed_input_or_io")
+        self.assertNotIn(secret, stderr.getvalue())
+
+
+
+class R123TransportSnapshotAndCountsTests(unittest.TestCase):
+    def _mutate_archive(self, path, name, update):
+        zipfile = __import__('zipfile')
+        with zipfile.ZipFile(path) as z:
+            files = {n: z.read(n) for n in z.namelist()}
+        record = json.loads(files[name])
+        update(record)
+        files[name] = json.dumps(record).encode()
+        manifest = json.loads(files['manifest.json'])
+        row = next(x for x in manifest['entries'] if x['relative_path'] == name)
+        row['size_bytes'] = len(files[name])
+        row['sha256'] = hashlib.sha256(files[name]).hexdigest()
+        files['manifest.json'] = json.dumps(manifest).encode()
+        with zipfile.ZipFile(path, 'w') as z:
+            for n, payload in files.items():
+                z.writestr(n, payload)
+
+    def test_archive_hash_is_the_exact_immutable_snapshot_audited(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.zip'
+            ArchiveAuditTests().make_archive(path)
+            original_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual_zipfile = __import__('zipfile').ZipFile
+            seen = []
+            def replace_path_during_archive_open(source, *args, **kwargs):
+                seen.append(type(source).__name__)
+                self.assertIsInstance(source, io.BytesIO)
+                # Change on-disk archive after its snapshot was hashed.
+                path.write_bytes(b'CORRUPTED_AFTER_SNAPSHOT')
+                return actual_zipfile(source, *args, **kwargs)
+            with patch('o_prep.zipfile.ZipFile',
+                       side_effect=replace_path_during_archive_open):
+                report = audit_transport_bundle(str(path))
+            self.assertEqual(seen, ['BytesIO'])
+            self.assertEqual(report['archive_sha256'], original_sha)
+            self.assertTrue(report['manifest_verified'])
+
+    def test_boolean_and_negative_packet_counters_are_not_valid(self):
+        scenarios = (
+            ('packet_metrics_lifetime', 'packets_sent_by_subject', True,
+             'invalid_lifetime_metric_counts'),
+            ('packet_metrics_lifetime', 'packets_received_by_subject', -1,
+             'invalid_lifetime_metric_counts'),
+            ('packet_metrics_72h_window', 'total_packets_in_window', True,
+             'invalid_window_metric_counts'),
+        )
+        for section, key, value, expected in scenarios:
+            with self.subTest(section=section, key=key, value=value):
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / 'synthetic.zip'
+                    ArchiveAuditTests().make_archive(path)
+                    self._mutate_archive(path, 'node_snapshot.json',
+                        lambda record: record[section].__setitem__(key, value))
+                    with self.assertRaisesRegex(OPrepError, expected):
+                        audit_transport_bundle(str(path))
+
+    def test_test_counter_arithmetic_rejects_bool_and_negative(self):
+        variants = (
+            ('passed', True),
+            ('passed', -1),
+        )
+        for field, value in variants:
+            with self.subTest(field=field, value=value):
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / 'synthetic.zip'
+                    ArchiveAuditTests().make_archive(path)
+                    def alter(record):
+                        record['regression_test_baseline'][field] = value
+                        if value == -1:
+                            record['regression_test_baseline']['failures'] = 2
+                    self._mutate_archive(path, 'node_snapshot.json', alter)
+                    with self.assertRaisesRegex(OPrepError, 'invalid_test_baseline_counts'):
+                        audit_transport_bundle(str(path))
+
+    def test_receipt_test_suite_count_must_be_nonnegative_int(self):
+        for bad in (True, -1, None):
+            with self.subTest(bad=bad):
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / 'synthetic.zip'
+                    ArchiveAuditTests().make_archive(path)
+                    self._mutate_archive(path, 'test_receipts.json',
+                        lambda record: record['test_suites'][0].__setitem__('total_tests', bad))
+                    with self.assertRaisesRegex(OPrepError, 'invalid_test_suite_counts'):
+                        audit_transport_bundle(str(path))
+
+
+class R124CrossPlatformEvidenceContractTests(unittest.TestCase):
+    def test_zip_member_ambiguous_alias_is_rejected_before_manifest(self):
+        for name in ("evidence//alias.dat", "evidence/file:stream",
+                     "evidence/trailing.", "evidence/trailing ",
+                     "evidence/bad" + chr(10) + "name.dat"):
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temp:
+                    archive = Path(temp) / "alias.zip"
+                    ArchiveAuditTests().make_archive(archive, unsafe_member=name)
+                    with self.assertRaisesRegex(OPrepError, "unsafe_archive_member"):
+                        audit_transport_bundle(str(archive))
+
+    def test_receipt_ntfs_ads_and_control_character_rejected_pre_open(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("evidence/claim:ads", "evidence/invalid" + chr(10) + "name.dat",
+                         "evidence//alias", "evidence/trailing."):
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(BindingError, "unsafe_receipt_path"):
+                        _safe_local_file(root, name)
+
+    def test_required_archive_document_must_be_object_not_list(self):
+        for filename in ("node_snapshot.json", "router_policy_manifest.json",
+                         "packet_reconciliation.json", "test_receipts.json",
+                         "open_gates.json", "evidence_ledger.json"):
+            with self.subTest(file=filename):
+                with tempfile.TemporaryDirectory() as temp:
+                    archive = Path(temp) / "evidence.zip"
+                    ArchiveAuditTests().make_archive(archive)
+                    R123TransportSnapshotAndCountsTests()._mutate_archive(
+                        archive, filename, lambda record: None)
+                    # Replace the payload with an actual JSON list and re-pin
+                    # its manifest entry, retaining all other required bytes.
+                    with __import__('zipfile').ZipFile(archive) as z:
+                        files = {n: z.read(n) for n in z.namelist()}
+                    files[filename] = b'[]'
+                    manifest = json.loads(files["manifest.json"])
+                    row = next(x for x in manifest["entries"]
+                               if x["relative_path"] == filename)
+                    row["size_bytes"] = 2
+                    row["sha256"] = hashlib.sha256(b'[]').hexdigest()
+                    files["manifest.json"] = json.dumps(manifest).encode()
+                    with __import__('zipfile').ZipFile(archive, 'w') as z:
+                        for name, payload in files.items():
+                            z.writestr(name, payload)
+                    with self.assertRaisesRegex(OPrepError, "evidence_shape_invalid"):
+                        audit_transport_bundle(str(archive))
+
+    def test_nested_archive_object_contracts_are_checked(self):
+        variants = (
+            ("node_snapshot.json", lambda x: x.__setitem__("queue_status_disk", [])),
+            ("router_policy_manifest.json", lambda x: x.__setitem__("installed_router", [])),
+            ("open_gates.json", lambda x: x.__setitem__("gates", [123])),
+            ("evidence_ledger.json", lambda x: x.__setitem__("claims", {})),
+        )
+        for filename, mutation in variants:
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as temp:
+                    archive = Path(temp) / "nested.zip"
+                    ArchiveAuditTests().make_archive(archive)
+                    R123TransportSnapshotAndCountsTests()._mutate_archive(
+                        archive, filename, mutation)
+                    with self.assertRaisesRegex(OPrepError, "evidence_shape_invalid"):
+                        audit_transport_bundle(str(archive))
+
+
+class R125InputBoundaryTests(unittest.TestCase):
+    def test_post_validation_final_symlink_is_not_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "evidence"
+            root.mkdir()
+            target = root / "item.dat"
+            target.write_bytes(b"EXPECTED")
+            outside = Path(temp) / "outside.dat"
+            outside.write_bytes(b"OUTSIDE_EVIDENCE")
+            _safe_local_file(root, "item.dat")
+            if os.name == "nt":
+                # Simulate a reparse point at this precise open boundary:
+                # non-admin Windows CI may not create a real symlink.
+                with reparse_points(target):
+                    with self.assertRaisesRegex(BindingError, "receipt_symlink_forbidden"):
+                        _read_limited(target, 1024)
+            else:
+                target.unlink()
+                target.symlink_to(outside)
+                with self.assertRaisesRegex(BindingError, "receipt_symlink_forbidden"):
+                    _read_limited(target, 1024)
+
+    def test_oversize_signal_cli_rejects_before_any_evaluation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            signal_path = Path(temp) / "signal.json"
+            signal_path.write_bytes(json.dumps(signal()).encode() +
+                                    b" " * (MAX_EXTERNAL_JSON_BYTES + 1))
+            for command in ("evaluate", "evaluate-bound"):
+                with self.subTest(command=command):
+                    stderr = StringIO()
+                    with patch("o_prep.evaluate_signal") as evaluate, \
+                         patch("o_prep.evaluate_bound_signal") as bound, \
+                         redirect_stderr(stderr):
+                        args = [command, "--signal", str(signal_path)]
+                        if command == "evaluate-bound":
+                            args.extend(["--receipt-index", "x.json",
+                                         "--evidence-root", str(temp)])
+                        rc = _main(args)
+                    self.assertEqual(rc, 2)
+                    self.assertEqual(json.loads(stderr.getvalue())["reason"],
+                                     "external_json_size_limit")
+                    evaluate.assert_not_called()
+                    bound.assert_not_called()
+
+    def test_oversize_peer_audit_fails_before_json_parse(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "fixture.zip"
+            peer = Path(temp) / "peer.json"
+            ArchiveAuditTests().make_archive(archive)
+            peer.write_bytes(b'{"peer":{"observed_snapshot":{}}}' +
+                             b" " * (MAX_EXTERNAL_JSON_BYTES + 1))
+            with self.assertRaisesRegex(OPrepError, "external_json_size_limit"):
+                audit_transport_bundle(str(archive), str(peer))
+
+    def test_malformed_peer_audit_fails_with_contract_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "fixture.zip"
+            peer = Path(temp) / "peer.json"
+            ArchiveAuditTests().make_archive(archive)
+            for bad in (b'[]', b'{"peer":[]}', b'{"peer":{}}'):
+                with self.subTest(value=bad):
+                    peer.write_bytes(bad)
+                    with self.assertRaisesRegex(OPrepError, "peer_audit_shape_invalid"):
+                        audit_transport_bundle(str(archive), str(peer))
 
 if __name__=='__main__':unittest.main()
