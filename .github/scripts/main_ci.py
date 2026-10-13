@@ -32,7 +32,12 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         temp = base / 'maestro-prep-main-ci'
         temp.mkdir(parents=True, exist_ok=True)
         env.update(TEMP=str(temp), TMP=str(temp), TMPDIR=str(temp))
-    proc = subprocess.run([sys.executable, *args], cwd=ROOT, env=env,
+    # Only Windows requires per-test skip provenance. A summary count is not
+    # evidence that the two known symlink-dependent cases were skipped.
+    actual_args = list(args)
+    if kind == 'coordinator' and HOST_IS_WINDOWS and actual_args[-1:] == ['-q']:
+        actual_args[-1] = '-v'
+    proc = subprocess.run([sys.executable, *actual_args], cwd=ROOT, env=env,
                           timeout=180, capture_output=True, text=True,
                           encoding='utf-8', errors='replace')
     data = None
@@ -74,7 +79,27 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
         passed = passed and details['skipped'] == allowed_skips
         passed = passed and count >= minimum and re.search(r'(?m)^OK(?: \(skipped=\d+\))?$', proc.stderr) is not None
         if kind == 'coordinator' and HOST_IS_WINDOWS and details['skipped']:
-            details['platform_gaps'] = ['UNEXECUTED_SYMLINK_TESTS']
+            # unittest -v names each skipped case; do not infer the reason
+            # merely from the total summary count. This is an
+            # evidence classification, never an acceptance exception.
+            skipped_lines = re.findall(
+                r'(?m)^test_[A-Za-z0-9_]+ \([^\r\n]{1,200}\) \.\.\. skipped [^\r\n]+$',
+                proc.stderr)
+            pairs = re.findall(
+                r"(?m)^(test_[A-Za-z0-9_]+) \([^\r\n]{1,200}\) \.\.\. skipped '([^'\r\n]{1,120})'$",
+                proc.stderr)
+            expected = {
+                ('test_external_skill_symlink_rejected', 'Symlinks restricted'),
+                ('test_symlinked_evidence_root_ancestor_is_rejected', 'Symlinks restricted'),
+            }
+            corroborated = (len(skipped_lines) == len(pairs) == details['skipped']
+                            and len(pairs) == len(set(pairs))
+                            and set(pairs).issubset(expected))
+            details['platform_gaps'] = [
+                'COORDINATOR_SYMLINK_TESTS_SKIPPED' if corroborated
+                else 'COORDINATOR_SKIP_CAUSE_UNVERIFIED'
+            ]
+            # Even corroborated missing tests are never passed.
             passed = False
         if kind == 'component' and HOST_IS_WINDOWS:
             passed = passed and proc.stderr.count('VENDOR_PLATFORM_EXCEPTION') == 1

@@ -17,12 +17,43 @@ class CIAccountingTests(unittest.TestCase):
         fake = subprocess.CompletedProcess(["python"], 0, stdout="", stderr=text)
         with patch.object(CI.subprocess, "run", return_value=fake):
             return CI.run_case(name, ["-m", "unittest"], kind)
-    def test_windows_coordinator_skip_records_gap_without_pass(self):
+    def test_windows_coordinator_skip_records_verified_cases_without_pass(self):
+        stderr = ("test_external_skill_symlink_rejected (test_maestro.CoordinatorTests) ... skipped 'Symlinks restricted'\n"
+                  "test_symlinked_evidence_root_ancestor_is_rejected (test_maestro.JunctionGuardTests) ... skipped 'Symlinks restricted'\n"
+                  'Ran 79 tests\nOK (skipped=2)\n')
         with patch.object(CI, 'HOST_IS_WINDOWS', True):
-            row = self.simulate('coordinator_tests', 'coordinator',
-                                'Ran 79 tests\nOK (skipped=2)\n')
+            row = self.simulate('coordinator_tests', 'coordinator', stderr)
         self.assertFalse(row['passed'])
-        self.assertEqual(row['platform_gaps'], ['UNEXECUTED_SYMLINK_TESTS'])
+        self.assertEqual(row['platform_gaps'], ['COORDINATOR_SYMLINK_TESTS_SKIPPED'])
+
+    def test_windows_coordinator_unrelated_skips_not_misattributed(self):
+        stderr = ("test_unrelated (test_example.OtherTests) ... skipped 'Another reason'\n"
+                  "test_other (test_example.OtherTests) ... skipped 'Another reason'\n"
+                  'Ran 79 tests\nOK (skipped=2)\n')
+        with patch.object(CI, 'HOST_IS_WINDOWS', True):
+            row = self.simulate('coordinator_tests', 'coordinator', stderr)
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['platform_gaps'], ['COORDINATOR_SKIP_CAUSE_UNVERIFIED'])
+
+    def test_windows_coordinator_summary_without_verbose_is_unverified(self):
+        with patch.object(CI, 'HOST_IS_WINDOWS', True):
+            row = self.simulate('coordinator_tests', 'coordinator', 'Ran 79 tests\nOK (skipped=2)\n')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['platform_gaps'], ['COORDINATOR_SKIP_CAUSE_UNVERIFIED'])
+
+    def test_windows_coordinator_same_expected_name_wrong_reason_unverified(self):
+        stderr = ("test_external_skill_symlink_rejected (test_maestro.CoordinatorTests) ... skipped 'unexpected'\n"
+                  'Ran 79 tests\nOK (skipped=1)\n')
+        with patch.object(CI, 'HOST_IS_WINDOWS', True):
+            row = self.simulate('coordinator_tests', 'coordinator', stderr)
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['platform_gaps'], ['COORDINATOR_SKIP_CAUSE_UNVERIFIED'])
+
+    def test_windows_coordinator_uses_verbose_mode_for_trace(self):
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='', stderr='Ran 79 tests\nOK\n')
+        with patch.object(CI, 'HOST_IS_WINDOWS', True), patch.object(CI.subprocess, 'run', return_value=fake) as runner:
+            CI.run_case('coordinator_tests', ['-m','unittest','discover','-s','tests','-q'], 'coordinator')
+        self.assertEqual(runner.call_args.args[0][-1], '-v')
 
     def test_windows_unprivileged_vendor_is_not_approved_as_green(self):
         with patch.object(CI, 'HOST_IS_WINDOWS', True):
