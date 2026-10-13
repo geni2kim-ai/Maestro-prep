@@ -88,7 +88,7 @@ class CIAccountingTests(unittest.TestCase):
         from unittest.mock import patch
         with patch.object(CI.importlib.util, 'find_spec', return_value=None):
             fake = subprocess.CompletedProcess(['python'], 0, stdout='',
-                    stderr='Ran 70 tests\nOK (skipped=5)\n')
+                    stderr=f'Ran 70 tests\nOK (skipped={len(CI.expected_component_skips())})\n')
             with patch.object(CI.subprocess, 'run', return_value=fake):
                 row = CI.run_case('public_component_tests', ['ignored'], 'component')
         self.assertFalse(row['passed'])
@@ -102,7 +102,7 @@ class CIAccountingTests(unittest.TestCase):
                     stdout='MAESTRO_COMPONENT_TEST_RESULT_V1='+json.dumps({
                         'schema':'MAESTRO_COMPONENT_TEST_RESULT_V1', 'tests_run':70,
                         'errors':0,'failures':0,'skipped':skipped,'was_successful':True})+'\n',
-                    stderr='Ran 70 tests\nOK (skipped=5)\n')
+                    stderr=f'Ran 70 tests\nOK (skipped={len(skipped)})\n')
             with patch.object(CI.subprocess, 'run', return_value=fake):
                 row=CI.run_case('public_component_tests', ['ignored'], 'component')
         self.assertFalse(row['passed'])
@@ -116,7 +116,7 @@ class CIAccountingTests(unittest.TestCase):
                     stdout='MAESTRO_COMPONENT_TEST_RESULT_V1='+json.dumps({
                         'schema':'MAESTRO_COMPONENT_TEST_RESULT_V1','tests_run':70,
                         'errors':0,'failures':0,'skipped':skipped,'was_successful':True})+'\n',
-                    stderr='Ran 70 tests\nOK (skipped=5)\n')
+                    stderr=f'Ran 70 tests\nOK (skipped={len(skipped)})\n')
             with patch.object(CI.subprocess,'run',return_value=fake):
                 row=CI.run_case('public_component_tests',['ignored'],'component')
         self.assertFalse(row['passed'])
@@ -143,7 +143,7 @@ class CIAccountingTests(unittest.TestCase):
     def test_component_clean_receipt_matches_known_optional_skips(self):
         with patch.object(CI.importlib.util, 'find_spec', return_value=None):
             row=self.simulate('public_component_tests','component',
-                              'Ran 70 tests\nOK (skipped=5)\n')
+                              f'Ran 70 tests\nOK (skipped={len(CI.expected_component_skips())})\n')
         self.assertTrue(row['passed'])
         self.assertEqual(row['skip_inventory_status'], 'COMPONENT_SKIP_IDENTITIES_VERIFIED')
 
