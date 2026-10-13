@@ -116,19 +116,28 @@ def run_case(name: str, args: list[str], kind: str) -> dict:
                   and data.get('host_mutation_authorized') is False)
         details['matched_cases'] = data.get('o_prep_cases_matched') if isinstance(data, dict) else None
     else:
-        m = re.search(r'Ran (\d+) tests', proc.stderr)
-        count = int(m.group(1)) if m else 0
+        # unittest prints exactly one complete run-count line. A second line
+        # can disguise missing test execution even when a later OK exists.
+        run_counts = re.findall(
+            r'(?m)^Ran (\d+) tests(?: in \d+(?:\.\d+)?s)?\r?$', proc.stderr)
+        count = int(run_counts[0]) if len(run_counts) == 1 else 0
         skips = re.search(r'OK \(skipped=(\d+)\)', proc.stderr)
         details.update(tests=count, skipped=int(skips.group(1)) if skips else 0)
-        minimum = 79 if kind == 'coordinator' else (6 if kind == 'release_tests' else (7 if kind == 'ci_guard_tests' else (9 if kind == 'external_gate_tests' else 70)))
+        # Keep the CI self-check floor equal to the actually retained
+        # security/accounting test inventory (R1.13:20, R1.14:23). A stale
+        # floor of seven silently allowed thirteen required tests to vanish.
+        minimum = {
+            'coordinator': 79, 'component': 70, 'release_tests': 6,
+            'external_gate_tests': 9, 'ci_guard_tests': 23,
+        }.get(kind, 70)
         allowed_skips = ((0 if importlib.util.find_spec('jsonschema') is not None else 5) +
                          (1 if HOST_IS_WINDOWS else 0)) if kind == 'component' else 0
         passed = passed and details['skipped'] == allowed_skips
         # Contradictory or multiple unittest summary lines must never be
         # counted as a successful test run merely because one says OK.
         summary = re.findall(r'(?m)^(?:OK(?: \(skipped=\d+\))?|FAILED(?: \([^\r\n]+\))?)\r?$', proc.stderr)
-        passed = (passed and count >= minimum and len(summary) == 1
-                  and summary[0].startswith('OK'))
+        passed = (passed and len(run_counts) == 1 and count >= minimum
+                  and len(summary) == 1 and summary[0].startswith('OK'))
         if kind == 'component':
             verified, reason = check_component_receipt(proc.stdout, count, details['skipped'])
             details['skip_inventory_status'] = reason

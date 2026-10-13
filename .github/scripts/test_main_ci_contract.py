@@ -147,6 +147,31 @@ class CIAccountingTests(unittest.TestCase):
         self.assertTrue(row['passed'])
         self.assertEqual(row['skip_inventory_status'], 'COMPONENT_SKIP_IDENTITIES_VERIFIED')
 
+    def test_removed_ci_accounting_tests_below_baseline_are_rejected(self):
+        # Old minimum=7 accepted 7/20; current baseline is 23 tests.
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='',
+                                           stderr='Ran 7 tests\nOK\n')
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['tests'], 7)
+
+    def test_conflicting_run_counts_even_with_single_ok_are_rejected(self):
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='',
+                  stderr='Ran 79 tests\nRan 2 tests\nOK\n')
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('coordinator_tests', ['ignored'], 'coordinator')
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['tests'], 0)
+
+    def test_ci_accounting_current_floor_runs_normally(self):
+        fake = subprocess.CompletedProcess(['python'], 0, stdout='',
+                                           stderr='Ran 23 tests in 0.006s\nOK\n')
+        with patch.object(CI.subprocess, 'run', return_value=fake):
+            row = CI.run_case('ci_receipt_accounting_tests', ['ignored'], 'ci_guard_tests')
+        self.assertTrue(row['passed'])
+        self.assertEqual(row['tests'], 23)
+
     def test_all_skipped_coordinator_is_not_a_pass(self):
         item = self.simulate("coordinator_tests", "coordinator", "Ran 79 tests\nOK (skipped=79)\n")
         self.assertFalse(item["passed"])
